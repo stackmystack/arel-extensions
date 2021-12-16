@@ -293,11 +293,13 @@ module ArelExtensions
           @table.project(@table[:name]) => %{(SELECT "users"."name" FROM "users") "alias"},
           @table[:name].when("smith").then("cool").else("uncool") => %{CASE "users"."name" WHEN 'smith' THEN 'cool' ELSE 'uncool' END AS alias},
         }.each do |exp, res|
+          puts res
           _(compile(exp.as('alias'))).must_be_like res
           _(compile(exp.xas('alias'))).must_be_like res
 
-          no_as = res.gsub('AS alias', '')
-          _(compile(exp.xas(nil))).must_be_like res
+          res_no_alias = res.gsub(/\s*(?:AS alias|"alias")\s*\z/, '')
+          puts "res_no_alias: #{res_no_alias}"
+          _(compile(exp.xas(nil))).must_be_like res_no_alias
         end
       end
 
