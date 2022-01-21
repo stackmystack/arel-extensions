@@ -10,9 +10,22 @@ branches:
 services:
   - mssql2014
 
-
 install:
   - set PATH=C:\Ruby%RUBY_VERSION%\bin;%PATH%
+  #Utils
+  - cinst wget
+  - cinst unzip
+  # Postgres
+  - cinst postgresql12
+  - set "PATH=C:\Program Files\PostgreSQL\12\bin;C:\Program Files\PostgreSQL\12\lib;C:\Program Files\PostgreSQL\12\include;C:\Program Files\PostgreSQL\12\pgAdmin 4\bin;%PATH%"
+  # Oracle
+  - wget -q https://download.oracle.com/otn_software/nt/instantclient/213000/instantclient-basic-windows.x64-21.3.0.0.0.zip
+  - wget -q https://download.oracle.com/otn_software/nt/instantclient/213000/instantclient-sqlplus-windows.x64-21.3.0.0.0.zip
+  - wget -q https://download.oracle.com/otn_software/nt/instantclient/213000/instantclient-sdk-windows.x64-21.3.0.0.0.zip
+  - unzip instantclient-basic-windows.x64-21.3.0.0.0.zip -d C:\
+  - unzip instantclient-sqlplus-windows.x64-21.3.0.0.0.zip -d C:\
+  - unzip instantclient-sdk-windows.x64-21.3.0.0.0.zip -d C:\
+  - set "ORACLE_HOME=C:\instant_client_21_3"
   - bundle config --local path vendor/bundle
   - bundle install
 
