@@ -26,6 +26,7 @@ install:
   - unzip instantclient-sqlplus-windows.x64-21.3.0.0.0.zip -d C:\
   - unzip instantclient-sdk-windows.x64-21.3.0.0.0.zip -d C:\
   - set "ORACLE_HOME=C:\instant_client_21_3"
+  - set "PATH=C:\instant_client_21_3;C:\instant_client_21_3\sdk\lib;C:\instant_client_21_3\sdk\include;%PATH%"
   - bundle config --local path vendor/bundle
   - bundle install
 
