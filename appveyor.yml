@@ -1,5 +1,8 @@
 version: "{build}"
 
+image:
+  - Visual Studio 2019
+
 cache:
   - vendor/bundle
 
