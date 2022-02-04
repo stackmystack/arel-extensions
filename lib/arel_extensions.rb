@@ -77,7 +77,13 @@ require 'arel_extensions/nodes/soundex'
 require 'arel_extensions/nodes/cast'
 require 'arel_extensions/nodes/json'
 
-
+if defined?(Arel::Visitors::SQLServer)
+  Arel::Visitors.const_set('MSSQL', Arel::Visitors::SQLServer)
+  require 'arel_extensions/visitors/mssql'
+  class Arel::Visitors::SQLServer
+    include ArelExtensions::Visitors::MSSQL
+  end
+end
 
 module Arel
   def self.rand
