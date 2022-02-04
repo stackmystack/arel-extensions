@@ -2,27 +2,27 @@ module ArelExtensions
   module Visitors
     module MSSQL
 
-      Arel::Visitors::MSSQL::DATE_MAPPING = {
+      DATE_MAPPING = {
         'd' => 'day', 'm' => 'month', 'y' => 'year', 'wd' => 'weekday', 'w' => 'week', 'h' => 'hour', 'mn' => 'minute', 's' => 'second'
       }.freeze
 
-      Arel::Visitors::MSSQL::DATE_FORMAT_DIRECTIVES = {
+      DATE_FORMAT_DIRECTIVES = {
         '%Y' => 'YYYY', '%C' => '', '%y' => 'YY', '%m' => 'MM', '%B' =>   '', '%b' => '', '%^b' => '', # year, month
         '%d' => 'DD', '%e' => '', '%j' =>   '', '%w' => 'dw', '%A' => '', # day, weekday
         '%H' => 'hh', '%k' => '', '%I' =>   '', '%l' =>   '', '%P' => '', '%p' => '', # hours
         '%M' => 'mi', '%S' => 'ss', '%L' => 'ms', '%N' => 'ns', '%z' => 'tz'
       }.freeze
 
-      Arel::Visitors::MSSQL::DATE_FORMAT_REGEX =
+      DATE_FORMAT_REGEX =
         Regexp.new(
-          Arel::Visitors::MSSQL::DATE_FORMAT_DIRECTIVES
+          DATE_FORMAT_DIRECTIVES
             .keys
             .map{|k| Regexp.escape(k)}
             .join('|')
         ).freeze
 
       # TODO; all others... http://www.sql-server-helper.com/tips/date-formats.aspx
-      Arel::Visitors::MSSQL::DATE_CONVERT_FORMATS = {
+      DATE_CONVERT_FORMATS = {
         'YYYY-MM-DD' => 120,
         'YY-MM-DD'  => 120,
         'MM/DD/YYYY' => 101,
@@ -144,7 +144,7 @@ module ArelExtensions
           left = o.left.end_with?('i') ? o.left[0..-2] : o.left
           conv = ['h', 'mn', 's'].include?(o.left)
           collector << 'DATEPART('
-          collector << Arel::Visitors::MSSQL::DATE_MAPPING[left]
+          collector << DATE_MAPPING[left]
           collector << Arel::Visitors::MSSQL::COMMA
           collector << 'CONVERT(datetime,' if conv
           collector = visit o.right, collector
@@ -255,8 +255,8 @@ module ArelExtensions
       end
 
       def visit_ArelExtensions_Nodes_Format o, collector
-        f = ArelExtensions::Visitors::strftime_to_format(o.iso_format, Arel::Visitors::MSSQL::DATE_FORMAT_DIRECTIVES)
-        if fmt = Arel::Visitors::MSSQL::DATE_CONVERT_FORMATS[f]
+        f = ArelExtensions::Visitors::strftime_to_format(o.iso_format, DATE_FORMAT_DIRECTIVES)
+        if fmt = DATE_CONVERT_FORMATS[f]
           collector << "CONVERT(VARCHAR(#{f.length})"
           collector << Arel::Visitors::MSSQL::COMMA
           collector = visit o.left, collector
@@ -272,8 +272,8 @@ module ArelExtensions
             collector << sep
             sep = ' + '
             case
-            when s.scan(Arel::Visitors::MSSQL::DATE_FORMAT_REGEX)
-              dir = Arel::Visitors::MSSQL::DATE_FORMAT_DIRECTIVES[s.matched]
+            when s.scan(DATE_FORMAT_REGEX)
+              dir = DATE_FORMAT_DIRECTIVES[s.matched]
               collector << 'LTRIM(STR(DATEPART('
               collector << dir
               collector << Arel::Visitors::MSSQL::COMMA
