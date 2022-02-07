@@ -112,12 +112,12 @@ jobs:
       - name: Install downloaded gem
         run: gem install --local *.gem --verbose
       - name: Run test to_sql
-        run: rake test:to_sql
+        run: bundle exec rake test:to_sql
       - name: Run test Postgres
         env:
           PGHOST: localhost
           PGUSER: postgres
-        run: rake test:postgresql
+        run: bundle exec rake test:postgresql
       - name: Run test MySql
         env:
           DB_CONNECTION: mysql
@@ -130,7 +130,7 @@ jobs:
           mysql --host 127.0.0.1 --port 3306 -uroot -e 'GRANT ALL PRIVILEGES ON arext_test.* TO travis;'
           rake test:mysql
       - name: Run test mssql
-        run: rake test:mssql
+        run: bundle exec rake test:mssql
 
 
   job_test_windows:
@@ -178,6 +178,6 @@ jobs:
       - name: Install downloaded gem
         run: gem install --local *.gem --verbose
       - name: Run test to_sql
-        run: rake test:to_sql
+        run: bundle exec rake test:to_sql
       - name: Run test mssql
-        run: rake test:mssql
+        run: bundle exec rake test:mssql
