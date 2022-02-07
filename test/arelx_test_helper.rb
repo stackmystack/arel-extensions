@@ -6,6 +6,12 @@ require 'active_record'
 
 require 'support/fake_record'
 
+begin
+  Gem::Specification.find_by_name('activerecord-sqlserver-adapter')
+  require 'activerecord-sqlserver-adapter'
+rescue
+end
+
 require 'arel_extensions'
 Arel::Table.engine = FakeRecord::Base.new
 
