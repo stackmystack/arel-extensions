@@ -466,14 +466,15 @@ module ArelExtensions
 
       def version_supported?(mariadb_v = '10.2.3', mysql_v = '5.7.0')
         conn = Arel::Table.engine.connection
-        conn.send(:mariadb?) && \
-          (conn.respond_to?(:get_database_version) && conn.send(:get_database_version) >= mariadb_v || \
-          conn.respond_to?(:version) && conn.send(:version) >= mariadb_v || \
-          conn.instance_variable_get(:"@version") && conn.instance_variable_get(:"@version") >= mariadb_v) || \
-          !conn.send(:mariadb?) && \
-            (conn.respond_to?(:get_database_version) && conn.send(:get_database_version) >= mysql_v || \
-            conn.respond_to?(:version) && conn.send(:version) >= mysql_v || \
-            conn.instance_variable_get(:"@version") && conn.instance_variable_get(:"@version") >= mysql_v)
+        conn.respond_to?(:mariadb?) && \
+          (conn.send(:mariadb?) && \
+            (conn.respond_to?(:get_database_version) && conn.send(:get_database_version) >= mariadb_v || \
+            conn.respond_to?(:version) && conn.send(:version) >= mariadb_v || \
+            conn.instance_variable_get(:"@version") && conn.instance_variable_get(:"@version") >= mariadb_v) || \
+            !conn.send(:mariadb?) && \
+              (conn.respond_to?(:get_database_version) && conn.send(:get_database_version) >= mysql_v || \
+              conn.respond_to?(:version) && conn.send(:version) >= mysql_v || \
+              conn.instance_variable_get(:"@version") && conn.instance_variable_get(:"@version") >= mysql_v))
         # ideally we should parse the instance_variable @full_version because @version contains only the supposedly
         # corresponding mysql version of the current mariadb version (which is not very helpful most of the time)
       end
