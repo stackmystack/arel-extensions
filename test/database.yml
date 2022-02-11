@@ -37,6 +37,8 @@ oracle:
   database: xe
   username: ruby
   password: oci8
+  host: 127.0.0.1
+  port: 1521
 jdbc-oracle:
   adapter: oracle_enhanced
   database: xe
