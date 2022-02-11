@@ -34,7 +34,7 @@ jdbc-postgresql:
   port: 5432
 oracle:
   adapter: oracle_enhanced
-  database: xe
+  database: arelx
   username: ruby
   password: oci8
   host: 127.0.0.1
