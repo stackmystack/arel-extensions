@@ -6,7 +6,7 @@ require 'arel_extensions/visitors/sqlite'
 
 if defined?(Arel::Visitors::Oracle)
   require 'arel_extensions/visitors/oracle'
-  require 'arel_extensions/visitors/oracle12'
+  # require 'arel_extensions/visitors/oracle12'
 end
 
 if defined?(Arel::Visitors::SQLServer) || defined?(Arel::Visitors::MSSQL)
