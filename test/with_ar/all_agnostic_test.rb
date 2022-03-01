@@ -33,7 +33,7 @@ module ArelExtensions
           t.column :name, :string
           t.column :comments, :text
           t.column :created_at, :date
-          t.column :updated_at, :datetime
+          t.column :updated_at, :datetime, precision: nil
           t.column :duration, :time
           t.column :other, :string
           t.column :score, :decimal, :precision => 20, :scale => 10
@@ -525,7 +525,7 @@ module ArelExtensions
         # puts @age.is_null.inspect
         # puts @age.is_null.to_sql
         # puts @age=='34'
-        assert_equal "Test", User.select(@name).where(@age.is_null.to_sql).first.name
+        assert_equal "Test", User.select(@name).where(@age.is_null).first.name
       end
 
       def test_math_plus
@@ -673,6 +673,7 @@ module ArelExtensions
       end
 
       def test_subquery_with_order
+        skip if ['mssql'].include?(@env_db) && Arel::VERSION.to_i < 10
         assert_equal 9, User.where(:name => User.select(:name).order(:name)).count
         assert_equal 9, User.where(@ut[:name].in(@ut.project(@ut[:name]).order(@ut[:name]))).count
         if !['mysql'].include?(@env_db)  # MySql can't have limit in IN subquery
