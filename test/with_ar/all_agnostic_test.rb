@@ -33,7 +33,7 @@ module ArelExtensions
           t.column :name, :string
           t.column :comments, :text
           t.column :created_at, :date
-          t.column :updated_at, :datetime
+          t.column :updated_at, :datetime, precision: nil
           t.column :duration, :time
           t.column :other, :string
           t.column :score, :decimal, :precision => 20, :scale => 10
@@ -370,6 +370,68 @@ module ArelExtensions
         assert_equal '2016-05-23', t(@lucas, @created_at.format('%Y-%m-%d'))
         assert_equal '2014/03/03 12:42:00', t(@lucas, @updated_at.format('%Y/%m/%d %H:%M:%S'))
         assert_equal '12:42%', t(@lucas, @updated_at.format('%R%%'))
+
+        # The following tests will ensure proper conversion of timestamps to
+        # requested timezones.
+        #
+        # The names of the timezones is highly dependant on the underlying
+        # operating system, and this is why we need to handle each database
+        # separately: the images we're using to test these databases are
+        # different. So don't rely on the provided examples. Your setup is your
+        # reference.
+        #
+        # One could always have portable code if s/he uses standard
+        # abbreviations, like:
+        #
+        # 1. CET  => Central European Time
+        # 2. CEST => Central European Summer Time
+        #
+        # Which implies that the caller should handle daylight saving detection.
+        # In fact, CET will handle daylight saving in MySQL but not Postgres.
+        #
+        # It looks like the posix convention is supported by mysql and
+        # postgresql, e.g.:
+        #
+        # posix/Europe/Paris
+        # posix/America/Nipigon
+        #
+        # so it looks like a more reliably portable way of specifying it.
+        time_zones = {
+          'mssql'       => {
+                            'utc'       => 'UTC',
+                            'sao_paulo' => 'Argentina Standard Time',
+                            'tahiti'    => 'Hawaiian Standard Time',
+                            'paris'     => 'Central European Standard Time'
+                           },
+          'mysql'       => {
+                            'utc'       => 'UTC',
+                            'sao_paulo' => 'America/Sao_Paulo',
+                            'tahiti'    => 'Pacific/Tahiti',
+                            'paris'     => 'Europe/Paris'
+                           },
+          'oracle'  => {
+                            'utc'       => 'UTC',
+                            'sao_paulo' => 'America/Sao_Paulo',
+                            'tahiti'    => 'Pacific/Tahiti',
+                            'paris'     => 'Europe/Paris'
+                            },
+          'postgresql'  => {
+                            'utc'       => 'UTC',
+                            'sao_paulo' => 'America/Sao Paulo (-03)',
+                            'tahiti'    => 'Pacific/Tahiti (-10)',
+                            'paris'     => 'Europe/Paris'
+                            },
+        }
+
+        tz = time_zones[ENV['DB']]
+        skip "Unsupported timezone conversion for DB=#{ENV['DB']}" if tz.nil?
+        assert_equal '2014/03/03 12:42:00', t(@lucas, @updated_at.format('%Y/%m/%d %H:%M:%S', tz['utc']))
+        assert_equal '2014/03/03 09:42:00', t(@lucas, @updated_at.format('%Y/%m/%d %H:%M:%S', tz['sao_paulo']))
+        assert_equal '2014/03/03 02:42:00', t(@lucas, @updated_at.format('%Y/%m/%d %H:%M:%S', tz['tahiti']))
+
+        # Winter/Summer time
+        assert_equal '2022/02/01 11:42:00', t(@lucas, Arel::Nodes.build_quoted('2022-02-01 10:42:00').cast(:datetime).format('%Y/%m/%d %H:%M:%S', tz['paris']))
+        assert_equal '2022/08/01 12:42:00', t(@lucas, Arel::Nodes.build_quoted('2022-08-01 10:42:00').cast(:datetime).format('%Y/%m/%d %H:%M:%S', tz['paris']))
       end
 
       def test_coalesce
@@ -525,7 +587,7 @@ module ArelExtensions
         # puts @age.is_null.inspect
         # puts @age.is_null.to_sql
         # puts @age=='34'
-        assert_equal "Test", User.select(@name).where(@age.is_null.to_sql).first.name
+        assert_equal "Test", User.select(@name).where(@age.is_null).first.name
       end
 
       def test_math_plus
@@ -673,6 +735,7 @@ module ArelExtensions
       end
 
       def test_subquery_with_order
+        skip if ['mssql'].include?(@env_db) && Arel::VERSION.to_i < 10
         assert_equal 9, User.where(:name => User.select(:name).order(:name)).count
         assert_equal 9, User.where(@ut[:name].in(@ut.project(@ut[:name]).order(@ut[:name]))).count
         if !['mysql'].include?(@env_db)  # MySql can't have limit in IN subquery

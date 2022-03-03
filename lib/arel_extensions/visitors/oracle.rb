@@ -447,7 +447,12 @@ module ArelExtensions
       def visit_ArelExtensions_Nodes_Format o, collector
         fmt = ArelExtensions::Visitors::strftime_to_format(o.iso_format, DATE_FORMAT_DIRECTIVES)
         collector << "TO_CHAR("
+        collector << "CAST(" if o.time_zone
         collector = visit o.left, collector
+        if o.time_zone
+          collector << " as timestamp) at time zone "
+          collector = visit o.time_zone, collector
+        end
         collector << COMMA
         collector = visit Arel::Nodes.build_quoted(fmt), collector
         collector << ")"
@@ -517,7 +522,7 @@ module ArelExtensions
         if element.is_a?(Time)
           ArelExtensions::Nodes::Format.new [element, '%H:%M:%S']
         elsif element.is_a?(Arel::Attributes::Attribute)
-          col = Arel::Table.engine.connection.schema_cache.columns_hash(element.relation.table_name)[element.name.to_s]
+          col = ArelExtensions::column_of(element.relation.table_name, element.name.to_s)
           if col && (col.type == :time)
             ArelExtensions::Nodes::Format.new [element, '%H:%M:%S']
           else
