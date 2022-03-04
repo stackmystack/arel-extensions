@@ -371,16 +371,6 @@ module ArelExtensions
         assert_equal '2014/03/03 12:42:00', t(@lucas, @updated_at.format('%Y/%m/%d %H:%M:%S'))
         assert_equal '12:42%', t(@lucas, @updated_at.format('%R%%'))
 
-        if !['sqlite'].include?(ENV['DB'])
-          # week number
-          assert_equal '10', t(@lucas, @updated_at.format('%V'))
-        end
-
-        if !['sqlite', 'mssql'].include?(ENV['DB'])
-          # year of week
-          assert_equal '2014', t(@lucas, @updated_at.format('%G'))
-        end
-
         # The following tests will ensure proper conversion of timestamps to
         # requested timezones.
         #
@@ -446,6 +436,32 @@ module ArelExtensions
           assert_equal '2022/02/01 11:42:00', t(@lucas, Arel::Nodes.build_quoted('2022-02-01 10:42:00').cast(:datetime).format('%Y/%m/%d %H:%M:%S', tz['paris']))
           assert_equal '2022/08/01 12:42:00', t(@lucas, Arel::Nodes.build_quoted('2022-08-01 10:42:00').cast(:datetime).format('%Y/%m/%d %H:%M:%S', tz['paris']))
         end
+      end
+
+      def test_format_iso_week
+        skip "Unsupported ISO week number for DB=#{ENV['DB']}" if ['sqlite'].include?(ENV['DB'])
+        assert_equal '10', t(@lucas, @updated_at.format('%V'))
+
+        assert_equal '01', t(@lucas, Arel::Nodes.build_quoted('2024-01-01 10:42:00').cast(:datetime).format('%V')) # Monday
+        assert_equal '01', t(@lucas, Arel::Nodes.build_quoted('2030-01-01 10:42:00').cast(:datetime).format('%V')) # Tuesday
+        assert_equal '01', t(@lucas, Arel::Nodes.build_quoted('2025-01-01 10:42:00').cast(:datetime).format('%V')) # Wednesday
+        assert_equal '01', t(@lucas, Arel::Nodes.build_quoted('2026-01-01 10:42:00').cast(:datetime).format('%V')) # Thursday
+        assert_equal '53', t(@lucas, Arel::Nodes.build_quoted('2027-01-01 10:42:00').cast(:datetime).format('%V')) # Friday
+        assert_equal '52', t(@lucas, Arel::Nodes.build_quoted('2028-01-01 10:42:00').cast(:datetime).format('%V')) # Saturday
+        assert_equal '52', t(@lucas, Arel::Nodes.build_quoted('2034-01-01 10:42:00').cast(:datetime).format('%V')) # Sunday
+      end
+
+      def test_format_iso_year_of_week
+        skip "Unsupported ISO year of week for DB=#{ENV['DB']}" if ['mssql', 'sqlite'].include?(ENV['DB'])
+        assert_equal '2014', t(@lucas, @updated_at.format('%G'))
+
+        assert_equal '2024', t(@lucas, Arel::Nodes.build_quoted('2024-01-01 10:42:00').cast(:datetime).format('%G')) # Monday
+        assert_equal '2030', t(@lucas, Arel::Nodes.build_quoted('2030-01-01 10:42:00').cast(:datetime).format('%G')) # Tuesday
+        assert_equal '2025', t(@lucas, Arel::Nodes.build_quoted('2025-01-01 10:42:00').cast(:datetime).format('%G')) # Wednesday
+        assert_equal '2026', t(@lucas, Arel::Nodes.build_quoted('2026-01-01 10:42:00').cast(:datetime).format('%G')) # Thursday
+        assert_equal '2026', t(@lucas, Arel::Nodes.build_quoted('2027-01-01 10:42:00').cast(:datetime).format('%G')) # Friday
+        assert_equal '2027', t(@lucas, Arel::Nodes.build_quoted('2028-01-01 10:42:00').cast(:datetime).format('%G')) # Saturday
+        assert_equal '2033', t(@lucas, Arel::Nodes.build_quoted('2034-01-01 10:42:00').cast(:datetime).format('%G')) # Sunday
       end
 
       def test_coalesce
