@@ -444,10 +444,10 @@ module ArelExtensions
         assert_equal '2014/08/03 14:42:00', t(@lucas, (@updated_at + 5.months).format('%Y/%m/%d %H:%M:%S', {tz['utc'] => tz['paris']}))
         if ENV['DB'] == 'mssql'
           assert_equal '2022/02/01 11:42:00', t(@lucas, Arel.quoted('2022-02-01 10:42:00').cast(:datetime).format('%Y/%m/%d %H:%M:%S', {tz['utc'] => tz['paris']}))
-          assert_equal '2022/08/01 12:42:00', t(@lucas, Arel.quoted('2022-08-01 10:42:00').cast(:datetime).format('%Y/%m/%d %H:%M:%S', {tz['utc'] => tz['paris']}))
+          assert_equal '2022/08/28 12:42:00', t(@lucas, Arel.quoted('2022-08-28 10:42:00').cast(:datetime).format('%Y/%m/%d %H:%M:%S', {tz['utc'] => tz['paris']}))
         else
           assert_equal '2022/02/01 11:42:00', t(@lucas, Arel.quoted('2022-02-01 10:42:00').cast(:datetime).format('%Y/%m/%d %H:%M:%S', tz['paris']))
-          assert_equal '2022/08/01 12:42:00', t(@lucas, Arel.quoted('2022-08-01 10:42:00').cast(:datetime).format('%Y/%m/%d %H:%M:%S', tz['paris']))
+          assert_equal '2022/08/28 12:42:00', t(@lucas, Arel.quoted('2022-08-28 10:42:00').cast(:datetime).format('%Y/%m/%d %H:%M:%S', tz['paris']))
         end
       end
 
@@ -578,6 +578,7 @@ module ArelExtensions
         d = Date.new(2016, 5, 23)
         assert_equal 0, User.where(@created_at < d).count
         assert_equal 9, User.where(@created_at >= d).count
+        assert_equal 9, User.where(User.arel_table[:created_at] < DateTime.current).count
       end
 
       def test_date_duration
