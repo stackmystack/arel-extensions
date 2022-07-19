@@ -55,7 +55,7 @@ module ArelExtensions
         d = Date.new(2016, 5, 23)
         connect_db
         setup_db
-        u = User.create age: 5, name: 'Lucas', created_at: d, score: 20.16, updated_at: Time.utc(2014, 3, 3, 12, 42, 0)
+        u = User.create age: 5, name: 'Lucas', created_at: d, score: 20.16, updated_at: Time.utc(2014, 3, 3, 12, 42, 0).to_datetime
         @lucas = User.where(id: u.id)
         u = User.create age: 15, name: 'Sophie', created_at: d, score: 20.16
         @sophie = User.where(id: u.id)
@@ -65,7 +65,7 @@ module ArelExtensions
         @arthur = User.where(id: u.id)
         u = User.create age: 23, name: 'Myung', created_at: d, score: 20.16, comments: ' '
         @myung = User.where(id: u.id)
-        u = User.create age: 25, name: 'Laure', created_at: d, score: 20.16, duration: Time.utc(2001, 1, 1, 12, 42, 21), updated_at: Time.utc(2014, 3, 3, 12, 42, 0)
+        u = User.create age: 25, name: 'Laure', created_at: d, score: 20.16, duration: Time.utc(2001, 1, 1, 12, 42, 21).to_datetime, updated_at: Time.utc(2014, 3, 3, 12, 42, 0).to_datetime
         @laure = User.where(id: u.id)
         u = User.create age: nil, name: 'Test', created_at: d, score: 1.62, other: 'toto'
         @test = User.where(id: u.id)
