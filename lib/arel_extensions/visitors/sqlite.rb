@@ -198,7 +198,7 @@ module ArelExtensions
 
       def visit_Arel_Nodes_Regexp(o, collector)
         collector = visit o.left, collector
-        collector << ' REGEXP'
+        collector << ' REGEXP '
         visit o.right, collector
       end
 

@@ -18,6 +18,19 @@
 - MS SQL: support for `regexp_replace` is added, but note that this requires an
   extension or a paid subscription so don't expect it to work out-of-the-box for
   freely distributed versions of the MS SQL Server.
+- `=~` / `!~` no longer blindly rewrite a Ruby `Regexp` into POSIX bracket expressions. 
+  It's now translated per database, only where the engine's dialect actually differs from Ruby's,
+  so matches behave like Ruby's own regexp engine (MySQL/MariaDB and PostgreSQL, so far),
+  including MySQL < 8.0.4 / MariaDB < 10.0.5's older, non-PCRE engine: `\b`/`\B` (word
+  boundary) now raise instead of silently matching nothing, since that engine has no such
+  concept at all, and character-class shorthands like `[\d]`/`[\w]`, even mixed with other
+  content (`[a\d]`) translate correctly instead of matching a literal letter.
+  A negated shorthand inside a character class (`[\D]`, `[\S]`, `[\W]`) already works
+  natively on PostgreSQL and modern MySQL/MariaDB, but has no representation at all on
+  that older engine and now raises there instead of silently matching a literal letter.
+  `\H` (Ruby's non-hex-digit shorthand, which none of these engines have a native concept
+  of) now raises inside a character class on every database.
+  `String` patterns and `regexp_replace` are unaffected.
 
 ## Release v2.5.0/v1.7.0 (02-09-2026)
 

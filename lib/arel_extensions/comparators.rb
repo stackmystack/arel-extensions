@@ -21,10 +21,7 @@ module ArelExtensions
     # REGEXP function
     # Pattern matching using regular expressions
     def =~(other)
-      #      arg = self.relation.engine.connection.schema_cache.columns_hash(self.relation.table_name)[self.name.to_s].type
-      #      if arg == :string || arg == :text
-      Arel::Nodes::Regexp.new self, convert_regexp(other)
-      #      end
+      Arel::Nodes::Regexp.new self, regexp_operand(other)
     end
 
     alias regex_matches =~
@@ -32,31 +29,20 @@ module ArelExtensions
     # NOT_REGEXP function
     # Negation of Regexp
     def !~(other)
-      #      arg = self.relation.engine.connection.schema_cache.columns_hash(self.relation.table_name)[self.name.to_s].type
-      #      if arg == :string || arg == :text
-      Arel::Nodes::NotRegexp.new self, convert_regexp(other)
-      #      end
+      Arel::Nodes::NotRegexp.new self, regexp_operand(other)
     end
 
     private
 
-    # Function used for not_regexp.
-    def convert_regexp(other)
+    # A String pattern is quoted as-is: it is taken to be already written in
+    # the target database's regex dialect. A Ruby Regexp is wrapped so the
+    # visitor can adapt its syntax to the database it targets (see
+    # ArelExtensions::Nodes::RegexpLiteral).
+    def regexp_operand(other)
       case other
-      when String
-        # Do nothing.
-      when Regexp
-        other = other.source.gsub('\A', '^')
-        other.gsub!('\z', '$')
-        other.gsub!('\Z', '$')
-        other.gsub!('\d', '[0-9]')
-        other.gsub!('\D', '[^0-9]')
-        other.gsub!('\w', '[0-9A-Za-z]')
-        other.gsub!('\W', '[^A-Za-z0-9_]')
-      else
-        raise(ArgumentError)
+      when ::Regexp then ArelExtensions::Nodes::RegexpLiteral.new(other)
+      else Arel.quoted(other, self)
       end
-      Arel.quoted(other, self)
     end
   end
 end

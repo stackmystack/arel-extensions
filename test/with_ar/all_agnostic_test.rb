@@ -41,6 +41,10 @@ module ArelExtensions
         csf.add_sql_functions(@env_db)
       end
 
+      def legacy_mysql?
+        @env_db == 'mysql' && !Arel::Visitors::MySQL.new(@cnx).regexp_escapes_supported?
+      end
+
       def setup_db
         @cnx.drop_table(:user_tests) rescue nil
         @cnx.create_table :user_tests do |t|
@@ -522,6 +526,9 @@ module ArelExtensions
         assert_equal 10, User.where(@name !~ '^L').count
         assert_equal 1, User.where(@name =~ /^M/).count
         assert_equal 10, User.where(@name !~ /^L/).count
+        assert_equal 1, User.where(@name =~ /\AM/).count
+        assert_equal 10, User.where(@name !~ /\AL/).count
+        assert_equal 1, User.where(@name =~ /\AJustin\z/).count
       end
 
       def test_regex_matches
@@ -529,6 +536,203 @@ module ArelExtensions
         skip 'SQL Server does not know about REGEXP without extensions' if @env_db == 'mssql'
         assert_equal 1, User.where(@name.regex_matches '^M').count
         assert_equal 1, User.where(@name.regex_matches /^M/).count
+      end
+
+      def test_regexp_character_shorthands
+        skip "Sqlite version can't load extension for regexp" if $sqlite && $load_extension_disabled
+        skip 'SQL Server does not know about REGEXP without extensions' if @env_db == 'mssql'
+
+        ids = [
+          User.create!(name: 'sh_digits',      comments: '482').id,
+          User.create!(name: 'sh_letters',     comments: 'abcXYZ').id,
+          User.create!(name: 'sh_underscored', comments: 'foo_bar').id,
+          User.create!(name: 'sh_spaced',      comments: 'a b c').id,
+        ]
+        scope = User.where(id: ids)
+        assert_equal 1, scope.where(@comments =~ /\A\d+\z/).count
+        assert_equal 3, scope.where(@comments =~ /\A\D+\z/).count
+        assert_equal 3, scope.where(@comments =~ /\A\w+\z/).count
+        assert_equal 1, scope.where(@comments =~ /\W/).count
+        assert_equal 1, scope.where(@comments =~ /\s/).count
+        assert_equal 3, scope.where(@comments =~ /\A\S+\z/).count
+      end
+
+      def test_regexp_anchors
+        skip "Sqlite version can't load extension for regexp" if $sqlite && $load_extension_disabled
+        skip 'SQL Server does not know about REGEXP without extensions' if @env_db == 'mssql'
+
+        ids = {
+          exact:    User.create!(name: 'anchor_exact', comments: 'hello').id,
+          suffix:   User.create!(name: 'anchor_suffix', comments: 'hello!').id,
+          prefix:   User.create!(name: 'anchor_prefix', comments: '!hello').id,
+          unrelated: User.create!(name: 'anchor_unrelated', comments: 'hi').id,
+          # \Z (unlike \z) tolerates exactly one trailing "\n".
+          trailing_newline: User.create!(name: 'anchor_trailing_newline', comments: "hello\n").id,
+          # Guard: the "\n" has to be the very last character, not merely present.
+          newline_then_more: User.create!(name: 'anchor_newline_then_more', comments: "hello\nmore").id,
+        }
+        scope = User.where(id: ids.values)
+
+        assert_equal [ids[:exact]], scope.where(@comments =~ /\Ahello\z/).pluck(:id)
+        assert_equal [ids[:exact], ids[:trailing_newline]],
+                     scope.where(@comments =~ /\Ahello\Z/).order(:id).pluck(:id)
+        assert_equal [ids[:exact], ids[:suffix], ids[:trailing_newline], ids[:newline_then_more]],
+                     scope.where(@comments =~ /\Ahello/).order(:id).pluck(:id)
+        assert_equal [ids[:exact], ids[:prefix]], scope.where(@comments =~ /hello\z/).order(:id).pluck(:id)
+      end
+
+      def test_regexp_word_boundary_anchors
+        skip "Sqlite version can't load extension for regexp" if $sqlite && $load_extension_disabled
+        skip 'SQL Server does not know about REGEXP without extensions' if @env_db == 'mssql'
+
+        # \b / \B are anchors (word boundary / non-word-boundary) outside a class.
+        #
+        # PostgreSQL's own \b means "backspace" everywhere, and has no boundary meaning at all,
+        # so this only works because \b/\B get rewritten to PostgreSQL's own \y/\Y.
+        ids = [
+          User.create!(name: 'wb_word',     comments: 'cat').id,
+          User.create!(name: 'wb_boundary', comments: 'cat dog').id,
+          User.create!(name: 'wb_inword',   comments: 'category').id,
+        ]
+        scope = User.where(id: ids)
+
+        if legacy_mysql?
+          # POSIX ERE (this engine) has no word-boundary assertion at all.
+          # \b/\B raise rather than silently matching nothing.
+          error = assert_raises(StandardError) { scope.where(@comments =~ /cat\b/).count }
+          assert_kind_of ArgumentError, (error.cause || error)
+        else
+          assert_equal 2, scope.where(@comments =~ /cat\b/).count
+          assert_equal 1, scope.where(@comments =~ /cat\B/).count
+        end
+      end
+
+      def test_regexp_escaped_backslash_is_not_translated
+        skip "Sqlite version can't load extension for regexp" if $sqlite && $load_extension_disabled
+        skip 'SQL Server does not know about REGEXP without extensions' if @env_db == 'mssql'
+
+        letters = %w[A b B d D h H s S w W Z z]
+        ids_by_letter = letters.each_with_object({}) do |letter, h|
+          h[letter] = User.create!(name: "esc_bs_#{letter}", comments: "X\\#{letter}Y").id
+        end
+        scope = User.where(id: ids_by_letter.values)
+
+        letters.each do |letter|
+          pattern = Regexp.new("\\AX\\\\#{Regexp.escape(letter)}Y\\z")
+          assert_equal 1, scope.where(id: ids_by_letter[letter]).where(@comments =~ pattern).count,
+                       "escaped backslash before #{letter.inspect} was corrupted"
+        end
+      end
+
+      def test_regexp_character_class_shorthands_keep_native_meaning
+        skip "Sqlite version can't load extension for regexp" if $sqlite && $load_extension_disabled
+        skip 'SQL Server does not know about REGEXP without extensions' if @env_db == 'mssql'
+
+        ids = [
+          User.create!(name: 'cc_digits',      comments: '482').id,
+          User.create!(name: 'cc_letters',     comments: 'abcXYZ').id,
+          User.create!(name: 'cc_underscored', comments: 'foo_bar').id,
+          User.create!(name: 'cc_spaced',      comments: 'a b c').id,
+          User.create!(name: 'cc_symbols',     comments: '!!!').id,
+          User.create!(name: 'cc_backspace',   comments: "a\bc").id,
+        ]
+        scope = User.where(id: ids)
+
+        # 'abcXYZ' (and 'foo_bar', and 'a b c') contain a literal 'b': this also guards
+        # against [\b] wrongly matching the letter 'b' instead of the backspace character,
+        # which is what MySQL's ICU engine (>= 8.0.4) does with a bare, untranslated [\b]
+        # (MariaDB's PCRE engine gets this one right natively).
+        assert_equal 1, scope.where(@comments =~ /[\b]/).count
+        assert_equal 1, scope.where(@comments =~ /[\d]/).count
+        assert_equal 1, scope.where(@comments =~ /[\s]/).count
+        assert_equal 5, scope.where(@comments =~ /[\w]/).count
+
+        # \D \S \W (negated shorthands) are unsupported inside a class on legacy MySQL/MariaDB.
+        if legacy_mysql?
+          [/[\D]/, /[\S]/, /[\W]/].each do |pattern|
+            error = assert_raises(StandardError) { scope.where(@comments =~ pattern).count }
+            assert_kind_of ArgumentError, (error.cause || error)
+          end
+        else
+          assert_equal 5, scope.where(@comments =~ /[\D]/).count
+          assert_equal 6, scope.where(@comments =~ /[\S]/).count
+          assert_equal 3, scope.where(@comments =~ /[\W]/).count
+        end
+      end
+
+      def test_regexp_class_shorthand_mixed_with_literal
+        skip "\\d inside a mixed class is only translated for PostgreSQL and MySQL, got #{@env_db}" if !%w[postgresql mysql].include?(@env_db)
+
+        ids = [
+          User.create!(name: 'mix_a', comments: 'a').id,
+          User.create!(name: 'mix_5', comments: '5').id,
+          User.create!(name: 'mix_b', comments: 'b').id,
+        ]
+        scope = User.where(id: ids)
+
+        assert_equal 2, scope.where(@comments =~ /[a\d]/).count
+      end
+
+      def test_regexp_legacy_mysql_negated_class_mixed_raises
+        skip 'Only relevant for the legacy (pre-PCRE) MySQL/MariaDB engine' if !legacy_mysql?
+
+        # \D (and \S \W \H) are unsupported inside a class on this engine.
+        error = assert_raises(StandardError) { User.where(@comments =~ /[a\D]/).count }
+        assert_kind_of ArgumentError, (error.cause || error)
+      end
+
+      def test_regexp_postgres_in_class_constraint_escapes
+        skip 'PostgreSQL-specific: ARE bracket-expression grammar' if @env_db != 'postgresql'
+
+        ids = {
+          A: User.create!(name: 'pg_has_A', comments: 'qAq').id,
+          Z: User.create!(name: 'pg_has_Z', comments: 'qZq').id,
+          z: User.create!(name: 'pg_has_z', comments: 'qzq').id,
+          B: User.create!(name: 'pg_has_B', comments: 'qBq').id,
+          # PostgreSQL's own \B (even inside a bracket) is a synonym for a literal backslash,
+          # not "not-a-word-boundary" and not the letter B.
+          backslash: User.create!(name: 'pg_has_backslash', comments: 'q\\q').id,
+          none: User.create!(name: 'pg_has_none', comments: 'qxq').id,
+        }
+        scope = User.where(id: ids.values)
+
+        assert_equal [ids[:B]], scope.where(@comments =~ /[\B]/).pluck(:id)
+        assert_equal [ids[:A]], scope.where(@comments =~ /[\A]/).pluck(:id)
+        assert_equal [ids[:Z]], scope.where(@comments =~ /[\Z]/).pluck(:id)
+        assert_equal [ids[:z]], scope.where(@comments =~ /[\z]/).pluck(:id)
+      end
+
+      def test_regexp_hex_digit_shorthand
+        # Ruby's \h/\H mean hex-digit / non-hex-digit, but neither POSIX ARE (PostgreSQL)
+        # nor PCRE (MySQL/MariaDB, and likely sqlite3-pcre) have a matching native escape.
+        skip "\\h/\\H are only translated for PostgreSQL and MySQL, got #{@env_db}" if !%w[postgresql mysql].include?(@env_db)
+
+        ids = [
+          User.create!(name: 'hex_lower',  comments: 'a1').id,
+          User.create!(name: 'hex_upper',  comments: 'AF').id,
+          User.create!(name: 'hex_digits', comments: '482').id,
+          User.create!(name: 'hex_nonhex', comments: 'g').id,
+          User.create!(name: 'hex_space',  comments: ' ').id,
+        ]
+        scope = User.where(id: ids)
+
+        assert_equal 3, scope.where(@comments =~ /\A\h+\z/).count
+        assert_equal 2, scope.where(@comments =~ /\A\H+\z/).count
+        assert_equal 3, scope.where(@comments =~ /[\h]/).count
+      end
+
+      def test_regexp_unrepresentable_in_class_escape_raises
+        skip "\\H-in-class is only translated (as a raise) for PostgreSQL and MySQL, got #{@env_db}" if !%w[postgresql mysql].include?(@env_db)
+
+        # \D \S \W \H have no representation as a class member on any dialect this library translates for.
+        # PostgreSQL and modern MySQL/MariaDB (PCRE) can only add class members, never subtract.
+        # Legacy MySQL/MariaDB has no in-class support for them at all.
+        error = assert_raises(StandardError) do
+          User.where(@comments =~ /[\H]/).count
+        end
+        root_cause = error.cause || error
+        assert_kind_of ArgumentError, root_cause
+        assert_match(/\\H/, root_cause.message)
       end
 
       def test_imatches
