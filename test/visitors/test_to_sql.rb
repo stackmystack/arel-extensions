@@ -119,9 +119,10 @@ module ArelExtensions
 
         _(compile((c >= 'test').as('new_name'))).must_be_like %{("users"."name" >= 'test') AS new_name}
         _(compile(c <= @table[:comments])).must_be_like %{"users"."name" <= "users"."comments"}
-        _(compile(c =~ /\Atest\Z/)).must_be_like %{"users"."name" REGEXP '^test$'}
-        _(compile(c =~ /\Atest\z/)).must_be_like %{"users"."name" REGEXP '^test$'}
-        _(compile(c !~ /\Ate\Dst\Z/)).must_be_like %{"users"."name" NOT REGEXP '^te[^0-9]st$'}
+        _(compile(c =~ /^test$/)).must_be_like %q{"users"."name" REGEXP '^test$'}
+        _(compile(c =~ /\Atest\z/)).must_be_like %q{"users"."name" REGEXP '\Atest\z'}
+        _(compile(c !~ /^te\Dst$/)).must_be_like %q{"users"."name" NOT REGEXP '^te\Dst$'}
+        _(compile(c !~ /\Ate\Dst\Z/)).must_be_like %q{"users"."name" NOT REGEXP '\Ate\Dst\Z'}
         _(compile(c.imatches('%test%'))).must_be_like %{"users"."name" ILIKE '%test%'}
         _(compile(c.imatches_any(['%test%', 't2']))).must_be_like %{(("users"."name" ILIKE '%test%') OR ("users"."name" ILIKE 't2'))}
         _(compile(c.idoes_not_match('%test%'))).must_be_like %{"users"."name" NOT ILIKE '%test%'}
@@ -174,8 +175,8 @@ module ArelExtensions
         _(compile(c > 'test')).must_be_like %{"users"."name" > 'test'}
         _(compile((c >= 'test').as('new_name'))).must_be_like %{("users"."name" >= 'test') AS new_name}
         _(compile(c <= @table[:comments])).must_be_like %{"users"."name" <= "users"."comments"}
-        _(compile(c =~ /\Atest\Z/)).must_be_like %{"users"."name" REGEXP '^test$'}
-        _(compile(c !~ /\Ate\Dst\Z/)).must_be_like %{"users"."name" NOT REGEXP '^te[^0-9]st$'}
+        _(compile(c =~ /\Atest\Z/)).must_be_like %q{"users"."name" REGEXP '\Atest\Z'}
+        _(compile(c !~ /\Ate\Dst\Z/)).must_be_like %q{"users"."name" NOT REGEXP '\Ate\Dst\Z'}
         _(compile(c.imatches('%test%'))).must_be_like %{"users"."name" ILIKE '%test%'}
         _(compile(c.imatches_any(['%test%', 't2']))).must_be_like %{(("users"."name" ILIKE '%test%') OR ("users"."name" ILIKE 't2'))}
         _(compile(c.idoes_not_match('%test%'))).must_be_like %{"users"."name" NOT ILIKE '%test%'}
@@ -236,8 +237,8 @@ module ArelExtensions
           .must_be_like %{"users"."name" > 'test'}
         _(compile((c >= 'test').as('new_name'))).must_be_like %{("users"."name" >= 'test') AS new_name}
         _(compile(c <= @table[:comments])).must_be_like %{"users"."name" <= "users"."comments"}
-        _(compile(c =~ /\Atest\Z/)).must_be_like %{"users"."name" REGEXP '^test$'}
-        _(compile(c !~ /\Ate\Dst\Z/)).must_be_like %{"users"."name" NOT REGEXP '^te[^0-9]st$'}
+        _(compile(c =~ /\Atest\Z/)).must_be_like %q{"users"."name" REGEXP '\Atest\Z'}
+        _(compile(c !~ /\Ate\Dst\Z/)).must_be_like %q{"users"."name" NOT REGEXP '\Ate\Dst\Z'}
       end
 
       it 'should manage complex formulas' do

@@ -20,6 +20,12 @@ module ArelExtensions
         'en_US' => '.,', 'fr_FR' => ',', 'sv_SE' => ', '
       }.freeze
 
+      # PostgreSQL's regex engine is POSIX ARE (Tcl), not PCRE.
+      # It already understands \A \Z \d \D \s \S \w \W, so unlike MySQL we do
+      # not expand those. Only two Ruby escapes need fixing, and the mapping is
+      # the same on every supported PostgreSQL version.
+      RUBY_REGEXP_TO_ARE = { '\\z' => '\\Z', '\\b' => '\\y', '\\B' => '\\Y' }.freeze
+
       def visit_ArelExtensions_Nodes_ByteSize(o, collector)
         collector << 'octet_length('
         collector = visit o.expr.coalesce(''), collector
@@ -77,6 +83,10 @@ module ArelExtensions
         collector = visit o.left, collector
         collector << ' !~ '
         visit o.right, collector
+      end
+
+      def visit_ArelExtensions_Nodes_RegexpLiteral(o, collector)
+        visit Arel.quoted(o.source.gsub(/\\[zbB]/, RUBY_REGEXP_TO_ARE)), collector
       end
 
       def visit_ArelExtensions_Nodes_Concat(o, collector)

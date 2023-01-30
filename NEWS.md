@@ -18,6 +18,18 @@
 - MS SQL: support for `regexp_replace` is added, but note that this requires an
   extension or a paid subscription so don't expect it to work out-of-the-box for
   freely distributed versions of the MS SQL Server.
+- `=~` / `!~` no longer blindly rewrite a Ruby `Regexp` into POSIX bracket
+  expressions. A Ruby `Regexp` is now translated per database, only where the
+  engine needs it:
+  - MySQL < 8.0.4 and MariaDB < 10.0.5 require us to re-write the passed `Regexp`.
+    On newer servers the pattern is passed through untouched. 
+  - PostgreSQL's engine is POSIX ARE, not PCRE. Only `\z` (invalid in
+    ARE) becomes `\Z`, and `\b`/`\B` (a backspace in ARE) become `\y`/`\Y`.
+  - SQLite (via `sqlite3-pcre`) and Oracle (`REGEXP_LIKE`) understand the Ruby
+    escapes natively, so nothing is rewritten.
+  A `String` pattern is always passed through verbatim: it is assumed to be
+  written in the target engine's own dialect. `regexp_replace` was, and still
+  is, unaffected by any of this.
 
 ## Release v2.5.0/v1.7.0 (02-09-2026)
 

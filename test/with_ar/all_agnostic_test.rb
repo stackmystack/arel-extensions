@@ -522,6 +522,11 @@ module ArelExtensions
         assert_equal 10, User.where(@name !~ '^L').count
         assert_equal 1, User.where(@name =~ /^M/).count
         assert_equal 10, User.where(@name !~ /^L/).count
+
+        # The following could be re-written for PG and MySQL, depending on version.
+        assert_equal 1, User.where(@name =~ /\AM/).count
+        assert_equal 10, User.where(@name !~ /\AL/).count
+        assert_equal 1, User.where(@name =~ /\AJustin\z/).count
       end
 
       def test_regex_matches

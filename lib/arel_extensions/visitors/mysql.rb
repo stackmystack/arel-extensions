@@ -14,6 +14,40 @@ module ArelExtensions
         '%M' => '%i', '%S' => '%S', '%L' =>   '', '%N' => '%f', '%z' => ''
       }.freeze
 
+      # Best-effort rewrite of the Ruby-only regex escapes to the POSIX bracket
+      # expressions understood by MySQL's pre-8.0.4 engine.
+      RUBY_REGEXP_TO_POSIX = {
+        '\\A' => '^',
+        '\\d' => '[0-9]',          '\\D' => '[^0-9]',
+        '\\h' => '[0-9A-Fa-f]',    '\\H' => '[^0-9A-Fa-f]',
+        '\\s' => '[[:space:]]',    '\\S' => '[^[:space:]]',
+        '\\w' => '[0-9A-Za-z_]',   '\\W' => '[^0-9A-Za-z_]',  # Ruby's \w keeps the underscore
+        '\\Z' => '$',              '\\z' => '$',
+      }.freeze
+
+      def ruby_regexp_to_posix(source)
+        scanner = StringScanner.new(source)
+        res = +''
+        in_class = false
+
+        while !scanner.eos?
+          if scanner.scan(/\\./m)
+            token = scanner[0]
+            res << (in_class ? token : RUBY_REGEXP_TO_POSIX.fetch(token, token))
+          elsif !in_class && (m = scanner.scan(%r{ \[ \^? \]? }))
+            in_class = true
+            res << m
+          elsif in_class && (m = scanner.scan(/\]/))
+            in_class = false
+            res << m
+          else
+            res << scanner.getch
+          end
+        end
+
+        res
+      end
+
       # This helper method did not exist in rails < 5.2
       if !Arel::Visitors::MySQL.method_defined?(:collect_nodes_for)
         def collect_nodes_for(nodes, collector, spacer, connector = ', ')
@@ -564,8 +598,17 @@ module ArelExtensions
         version_supported?('10.0.5', '8.0')
       end
 
+      def regexp_escapes_supported?
+        version_supported?('10.0.5', '8.0.4')
+      end
+
+      def visit_ArelExtensions_Nodes_RegexpLiteral(o, collector)
+        pattern = regexp_escapes_supported? ? o.source : ruby_regexp_to_posix(o.source)
+        visit Arel.quoted(pattern), collector
+      end
+
       def version_supported?(mariadb_v = '10.2.3', mysql_v = '5.7.0')
-        conn = Arel::Table.engine.connection
+        conn = @connection || Arel::Table.engine.connection
         conn.send(:mariadb?) &&
           (conn.respond_to?(:get_database_version) && conn.send(:get_database_version) >= mariadb_v ||
           conn.respond_to?(:version) && conn.send(:version) >= mariadb_v ||

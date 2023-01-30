@@ -405,6 +405,10 @@ module ArelExtensions
         visit o.right, collector
       end
 
+      def visit_ArelExtensions_Nodes_RegexpLiteral(o, collector)
+        visit Arel.quoted(o.source), collector
+      end
+
       def visit_ArelExtensions_Nodes_IMatches(o, collector)
         collector = infix_value o, collector, ' ILIKE '
         if o.escape
