@@ -20,6 +20,37 @@ module ArelExtensions
         'en_US' => '.,', 'fr_FR' => ',', 'sv_SE' => ', '
       }.freeze
 
+      # PostgreSQL's regex engine is POSIX ARE (Tcl), not PCRE.
+      #
+      # It already understands \A \d \D \s \S \w \W exactly like Ruby.
+      # \h/\H (Ruby's hex-digit shorthand) have no ARE equivalent at all.
+      #
+      # ARE's own \Z is a strict end-of-string anchor: unlike Ruby's \Z, it
+      # doesn't tolerate a single trailing "\n". So Ruby's \Z needs the "\n"
+      # made optional and explicit; ARE's \Z is then exactly Ruby's \z.
+      RUBY_REGEXP_TO_ARE = {
+        '\b' => '\y',          '\B' => '\Y',
+        '\h' => '[0-9A-Fa-f]', '\H' => '[^0-9A-Fa-f]',
+        '\Z' => '\n?\Z',       '\z' => '\Z',
+      }.freeze
+
+      # PostgreSQL's ARE grammar only recognizes \d \D \w \W \s \S as valid
+      # escapes *inside* a `[...]` bracket expression. Everything else,
+      # including \b, is illegal even though \b is perfectly legal (and already
+      # means "backspace", same as Ruby) outside of one.
+      #
+      # So passing it through untouched silently matches the wrong thing.
+      # `nil` makes RegexpLiteral#translate raise instead.
+      RUBY_REGEXP_TO_ARE_IN_CLASS = {
+        '\A' => 'A',
+        '\Z' => 'Z',
+        '\z' => 'z',
+        '\B' => 'B',
+        '\b' => '\x08',
+        '\h' => '0-9A-Fa-f',
+        '\H' => nil,
+      }.freeze
+
       def visit_ArelExtensions_Nodes_ByteSize(o, collector)
         collector << 'octet_length('
         collector = visit o.expr.coalesce(''), collector
@@ -70,6 +101,10 @@ module ArelExtensions
         collector = visit o.left, collector
         collector << ' ~ '
         visit o.right, collector
+      end
+
+      def visit_ArelExtensions_Nodes_RegexpLiteral(o, collector)
+        visit Arel.quoted(o.translate(RUBY_REGEXP_TO_ARE, RUBY_REGEXP_TO_ARE_IN_CLASS)), collector
       end
 
       remove_method(:visit_Arel_Nodes_NotRegexp) rescue nil

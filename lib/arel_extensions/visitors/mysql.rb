@@ -14,6 +14,87 @@ module ArelExtensions
         '%M' => '%i', '%S' => '%S', '%L' =>   '', '%N' => '%f', '%z' => ''
       }.freeze
 
+      # Best-effort rewrite of the Ruby-only regex escapes to the POSIX bracket
+      # expressions understood by MySQL's pre-8.0.4 engine (POSIX ERE, not PCRE:
+      # it has no notion of \d \w \s etc, nor of \b/\B word-boundary assertions).
+      MYSQL_LEGACY_ESCAPES = {
+        '\A' => '^',
+        '\d' => '[0-9]',          '\D' => '[^0-9]',
+        '\h' => '[0-9A-Fa-f]',    '\H' => '[^0-9A-Fa-f]',
+        '\s' => '[[:space:]]',    '\S' => '[^[:space:]]',
+        '\w' => '[0-9A-Za-z_]',   '\W' => '[^0-9A-Za-z_]',  # Ruby's \w keeps the underscore
+        # Ruby's \Z also matches right before a single trailing "\n"; this
+        # engine's $ doesn't (it's a strict end-of-string anchor), so the
+        # "\n" has to be made optional and explicit. \z has no such
+        # tolerance in Ruby either, so plain $ already matches it exactly.
+        #
+        # That "\n" is a literal byte (not the two characters "\" "n"): this
+        # engine drops the backslash of escapes it doesn't recognize (see
+        # below), and it doesn't recognize \n, so the textual escape would
+        # silently degrade to an optional literal "n" instead of a newline.
+        # An actual newline byte means itself in a pattern on every engine,
+        # so it isn't at the mercy of that.
+        '\Z' => "\n?$",            '\z' => '$',
+        '\b' => nil,               '\B' => nil,
+      }.freeze
+
+      # This same pre-8.0.4 engine drops the backslash of any unrecognized
+      # escape and keeps only the following letter, so inside a class every
+      # one of these would otherwise silently degrade to a literal letter
+      # (e.g. `[\d]` would match "d", not a digit).
+      #
+      # \A \Z \z \B degrade to the literal letter, matching Ruby's own
+      # in-class meaning for them, so they're mapped explicitly rather than
+      # relying on that to keep happening by accident.
+      #
+      # \d \h \s \w are ordinary additive class members (same shape as
+      # MYSQL_MODERN_ESCAPES_IN_CLASS below) and compose fine with other
+      # class content (so for instance`[a\d]` works).
+      #
+      # \D \S \W \H are unsupported inside a class, period: this engine's
+      # bracket expressions can only add members, never subtract, so `nil`
+      # makes them raise.
+      MYSQL_LEGACY_ESCAPES_IN_CLASS = {
+        '\A' => 'A',
+        '\B' => 'B', '\b' => "\x08", # a literal backspace byte: \x08 itself does not survive this engine's escape handling
+        '\d' => '0-9',
+        '\h' => '0-9A-Fa-f',
+        '\s' => '[:space:]',
+        '\w' => '0-9A-Za-z_',
+        '\Z' => 'Z', '\z' => 'z',
+        # invalid
+        '\D' => nil, '\H' => nil, '\S' => nil, '\W' => nil,
+      }.freeze
+
+      # Modern engines are NOT one shared dialect: MySQL >= 8.0.4 switched its
+      # regex engine to ICU, while MariaDB >= 10.0.5 switched to PCRE.
+      # They're different implementations, but for every escape handled below
+      # they happen to agree with each other, and with Ruby, on
+      # \A \Z \z \b \B \d \D \s \S \w \W *outside* a character class.
+      #
+      # Two things both ICU and PCRE disagree with Ruby on:
+      #   - \h and \H mean "horizontal whitespace" in both, and "hex digit" in Ruby.
+      #   - \A \Z \z \B used *inside* a character class in Ruby degrades to a literal letter,
+      #     but both engines reject them there as invalid escapes.
+      MYSQL_MODERN_ESCAPES = {
+        '\h' => '[0-9A-Fa-f]', '\H' => '[^0-9A-Fa-f]',
+      }.freeze
+
+      # \H has no in-class translation: bracket expressions can only add
+      # characters/ranges, not subtract them, so "not a hex digit" cannot be
+      # expressed as a class member the way [\h] (hex digit) can.
+      #
+      # So passing it through untouched silently matches the wrong thing.
+      # `nil` makes RegexpLiteral#translate raise instead.
+      MYSQL_MODERN_ESCAPES_IN_CLASS = {
+        '\A' => 'A',
+        '\B' => 'B', '\b' => "\x08",
+        '\h' => '0-9A-Fa-f',
+        '\Z' => 'Z', '\z' => 'z',
+        # invalid
+        '\H' => nil,
+      }.freeze
+
       # This helper method did not exist in rails < 5.2
       if !Arel::Visitors::MySQL.method_defined?(:collect_nodes_for)
         def collect_nodes_for(nodes, collector, spacer, connector = ', ')
@@ -260,6 +341,16 @@ module ArelExtensions
         }
         collector << ')'
         collector
+      end
+
+      def visit_ArelExtensions_Nodes_RegexpLiteral(o, collector)
+        pattern =
+          if regexp_escapes_supported?
+            o.translate(MYSQL_MODERN_ESCAPES, MYSQL_MODERN_ESCAPES_IN_CLASS)
+          else
+            o.translate(MYSQL_LEGACY_ESCAPES, MYSQL_LEGACY_ESCAPES_IN_CLASS)
+          end
+        visit Arel.quoted(pattern), collector
       end
 
       def visit_ArelExtensions_Nodes_RegexpReplace(o, collector)
@@ -564,8 +655,12 @@ module ArelExtensions
         version_supported?('10.0.5', '8.0')
       end
 
+      def regexp_escapes_supported?
+        version_supported?('10.0.5', '8.0.4')
+      end
+
       def version_supported?(mariadb_v = '10.2.3', mysql_v = '5.7.0')
-        conn = Arel::Table.engine.connection
+        conn = @connection || Arel::Table.engine.connection
         conn.send(:mariadb?) &&
           (conn.respond_to?(:get_database_version) && conn.send(:get_database_version) >= mariadb_v ||
           conn.respond_to?(:version) && conn.send(:version) >= mariadb_v ||
