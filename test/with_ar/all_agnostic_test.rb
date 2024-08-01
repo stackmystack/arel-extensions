@@ -1,5 +1,6 @@
 require 'arelx_test_helper'
 require 'date'
+require 'tzinfo'
 
 module ArelExtensions
   module WithAr
@@ -693,7 +694,7 @@ module ArelExtensions
         assert_equal count_for_may, User.where(@created_at.month.eq('05')).count
         # Day
         assert_equal 23, t(@laure, @created_at.day).to_i
-        assert_equal 0, User.where(@created_at.day.eq('05')).count
+        assert_equal DateTime.now.day == 5 ? 1 : 0, User.where(@created_at.day.eq('05')).count
 
         # skip "manage DATE" if @env_db == 'oracle'
         # Hour
