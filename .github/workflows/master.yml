@@ -1,0 +1,19 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - dev/**
+      - bin/ci
+      - .github/workflows/matrix.toml
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Test
+        run: docker compose -f dev/compose.yaml --profile latest up --exit-code-from arelx-latest

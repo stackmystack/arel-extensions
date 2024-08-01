@@ -1,0 +1,26 @@
+name: "PR: Rebuild Image and Test"
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - dev/**
+      - bin/ci
+      - .github/workflows/matrix.toml
+
+jobs:
+  test:
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Test
+        run: |
+          TAG="pr-${{ github.event.pull_request.number }}"
+          # docker build -f dev/Dockerfile -t "$TAG" .
+          # docker run --network host --mount type=bind,source="$(pwd)",target=/app $TAG
+          docker compose -f dev/compose.yaml --profile build up --exit-code-from arelx-build
