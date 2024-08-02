@@ -12,4 +12,3 @@ echo "Packaging v2"
 cp ./version_v2.rb lib/arel_extensions/version.rb
 cp ./gemspecs/arel_extensions-v2.gemspec ./arel_extensions.gemspec
 gem build ./arel_extensions.gemspec
-
