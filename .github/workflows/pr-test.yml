@@ -1,0 +1,15 @@
+name: PR Test
+
+on:
+  workflow_run:
+    workflows: ["PR Image"]
+    types:
+      - completed
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Do Something
+        run: echo "hello, test"
