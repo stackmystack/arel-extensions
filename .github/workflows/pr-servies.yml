@@ -1,0 +1,55 @@
+name: PostgreSQL service example
+on:
+  pull_request:
+    branches:
+      - master
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    container: ghcr.io/stackmystack/arel-extensions:latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - run: git config --system --add safe.directory /_w/arel-extensions
+      - name: setup locale
+        run: |
+          sudo locale-gen fr_FR.utf8
+          sudo update-locale
+      - name: setup postgres 11
+        run: |
+          apt update
+          apt -y install postgresql-11 systemctl
+          systemctl enable postgresql
+          systemctl start postgresql
+          su -c "psql -c \"alter user postgres with password 'secret'\"" postgres
+          su -c "createdb arelx_test" postgres
+          bin/ci test postgres
+      # - name: Test
+      #   run: bin/ci test postgres
+
+    # services:
+    #   postgres:
+    #     image: postgres
+    #     env:
+    #       POSTGRES_USER: postgres
+    #       POSTGRES_PASSWORD: secret
+    #       POSTGRES_DB: arelx_test
+    #     options: >-
+    #       --health-cmd pg_isready
+    #       --health-interval 10s
+    #       --health-timeout 5s
+    #       --health-retries 5
+    #     ports:
+    #       - 5432:5432
+    #   mariadb:
+    #     image: mysql
+    #     ports:
+    #       - 3306:3306
+    #     options: >-
+    #       --health-cmd="mysqladmin ping --silent"
+    #       --health-interval=10s
+    #       --health-timeout=5s
+    #       --health-retries=5
+    #     env:
+    #       MYSQL_ALLOW_EMPTY_PASSWORD: true
+    #       MYSQL_DATABASE: arelx_test

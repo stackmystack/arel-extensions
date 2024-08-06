@@ -1,0 +1,4 @@
+[mysql.arel_extensions-v2]
+rails6_1 = ["3.0"]
+[postgres.arel_extensions-v2]
+rails6_1 = ["3.0"]

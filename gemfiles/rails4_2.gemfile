@@ -33,6 +33,10 @@ group :development, :test do
   gem 'activerecord-jdbcmysql-adapter', platforms: :jruby
   gem 'activerecord-jdbcpostgresql-adapter', platforms: :jruby
   gem 'activerecord-jdbcmssql-adapter', platforms: :jruby
+
+  # for CI
+  gem 'toml-rb'
+  gem 'colorize'
 end
 
 gemspec path: Dir.pwd

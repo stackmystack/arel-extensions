@@ -1,0 +1,32 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'yaml'
+require 'json'
+require 'pathname'
+require 'toml-rb'
+
+workflow = Pathname(ARGV[0]).read.gsub!(/rails: (\d(_\d)?)/, 'rails: "\1"')
+jobs = Psych.load(workflow, symbolize_names: true)[:jobs]
+
+data= {}
+
+jobs.each do |name, details|
+  details[:strategy][:matrix][:versions].each do |entry|
+    db = name.to_s.gsub(/\Ajob_test_/, '').to_sym
+    ruby = entry[:ruby]
+    rails = entry[:rails]
+    arelx = entry[:arelx]
+    gemspec = :"arel_extensions-v#{arelx}"
+    gemfile = :"rails#{rails}"
+
+    data[db] ||= {}
+    data[db][gemspec] ||= {}
+    data[db][gemspec][gemfile] ||= []
+    data[db][gemspec][gemfile] << ruby
+    data[db][gemspec][gemfile].sort!
+  end
+end
+
+toml = TomlRB.dump(data)
+puts toml

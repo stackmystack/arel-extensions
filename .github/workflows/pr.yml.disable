@@ -1,0 +1,28 @@
+name: "PR: Test on latest"
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "!dev/**"
+      - "!bin/ci"
+      - "!.github/workflows/matrix.toml"
+
+jobs:
+  test:
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Test
+        run: |
+          IMAGE_ID=$REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME
+          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+          VERSION=latest
+          echo "$IMAGE_ID:$VERSION"
+          docker compose -f dev/compose.yaml --profile latest up --exit-code-from arelx-latest
+          # docker run --network host --mount type=bind,source="$(pwd)",target=/app $IMAGE_ID:$VERSION
