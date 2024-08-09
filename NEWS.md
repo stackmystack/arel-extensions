@@ -1,5 +1,11 @@
 # News
 
+- MS SQL: restrict date-quoting to Arel <= 6 (Rails 4.2)
+
+## Release v2.1.11/v1.3.11
+
+- MS SQL: turn on warnings on requires only when necessary.
+
 ## Release v2.1.10/v1.3.10
 
 - MS SQL: add support for jruby 9.4 via [activerecord-jdbc-alt-adapter](https://rubygems.org/gems/activerecord-jdbc-alt-adapter/)

@@ -4,11 +4,20 @@
 # 1. putting it inside the visitor or anywhere else will not
 #    guarantee its actual loading.
 # 2. it needs to load before arel_extensions/visitors.
-if RUBY_PLATFORM == 'java' && Gem::Specification.find { |g| g.name == 'jdbc-mssql' }
+if RUBY_PLATFORM == 'java' \
+  && RUBY_ENGINE == 'jruby' \
+  && (version = JRUBY_VERSION.split('.').map(&:to_i)) && version[0] == 9 && version[1] >= 4 \
+  && Gem::Specification.find { |g| g.name == 'jdbc-mssql' }
   begin
     require 'arel/visitors/sqlserver'
   rescue LoadError
     warn 'arel/visitors/sqlserver not found: MSSQL might not work correctly.'
+  end
+elsif RUBY_PLATFORM != 'java' && Arel::VERSION.to_i < 10
+  begin
+    require 'arel_sqlserver'
+  rescue LoadError
+    warn 'arel_sqlserver not found: SQLServer Visitor might not work correctly.'
   end
 end
 
@@ -35,15 +44,6 @@ if defined?(Arel::Visitors::DepthFirst)
     def visit_Arel_SelectManager o
         visit o.ast
     end
-  end
-end
-
-# Especially required here, not inside the next if, for Arel < 6.
-if RUBY_PLATFORM != 'java'
-  begin
-    require 'arel_sqlserver'
-  rescue LoadError
-    warn 'gem arel_sqlserver not found: SQLServer Visitor might not work correctly.'
   end
 end
 
