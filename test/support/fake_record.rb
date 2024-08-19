@@ -145,5 +145,11 @@ module FakeRecord
     def connection
       connection_pool.connection
     end
+
+    if ActiveRecord.version >= Gem::Version.create('7.2')
+      def with_connection(...)
+        connection_pool.with_connection(...)
+      end
+    end
   end
 end
