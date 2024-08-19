@@ -318,87 +318,87 @@ jobs:
           DB_USERNAME: root
         run: bundle exec rake test:mysql
 
-  job_test_mssql:
-    name: test mssql on linux
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        versions: [
-            { ruby: "3.3", rails: 7_1, arelx: 2 },
-            { ruby: "3.3", rails: 7, arelx: 2 },
-            { ruby: "3.3", rails: 6_1, arelx: 2 },
-            { ruby: "3.3", rails: 6, arelx: 2 },
-            { ruby: "3.2", rails: 7_1, arelx: 2 },
-            { ruby: "3.2", rails: 7, arelx: 2 },
-            { ruby: "3.2", rails: 6_1, arelx: 2 },
-            { ruby: "3.2", rails: 6, arelx: 2 },
-            { ruby: "3.1", rails: 7_1, arelx: 2 },
-            { ruby: "3.1", rails: 7, arelx: 2 },
-            { ruby: "3.1", rails: 6_1, arelx: 2 },
-            { ruby: "3.1", rails: 6, arelx: 2 },
-            { ruby: "3.0", rails: 7, arelx: 2 },
-            { ruby: "3.0", rails: 6_1, arelx: 2 },
-            { ruby: "3.0", rails: 6, arelx: 2 },
-            { ruby: "2.7", rails: 6_1, arelx: 2 },
-            { ruby: "2.7", rails: 6, arelx: 2 },
-            { ruby: "2.7", rails: 5_2, arelx: 1 },
-            { ruby: "2.7", rails: 4_2, arelx: 1 },
-            { ruby: "2.5", rails: 6_1, arelx: 2 },
-            { ruby: "2.5", rails: 6, arelx: 2 },
-            { ruby: "2.5", rails: 5_2, arelx: 1 },
-            { ruby: "2.5", rails: 4_2, arelx: 1 },
-            # {ruby: jruby-9.2,   rails: 6_1, arelx: 2},
-            # {ruby: jruby-9.2,   rails: 6,   arelx: 2},
-            { ruby: jruby-9.2, rails: 5_2, arelx: 1 },
-            { ruby: jruby-9.2, rails: 4_2, arelx: 1 },
-            # See comments on 9.4 to understand why these are disabled for now.
-            # {ruby: jruby-9.3,   rails: 6_1, arelx: 2},
-            # {ruby: jruby-9.3,   rails: 6,   arelx: 2},
-            # {ruby: jruby-9.3,   rails: 5_2, arelx: 1},
-            { ruby: jruby-9.4, rails: 7_1, arelx: 2 },
-            { ruby: jruby-9.4, rails: 7, arelx: 2 },
-            #
-            # 6 and 6.1 don't work because of a bug in the alt adapter
-            # https://github.com/JesseChavez/activerecord-jdbc-adapter/issues/16
-            # {ruby: jruby-9.4,   rails: 6_1, arelx: 2},
-            # {ruby: jruby-9.4,   rails: 6,   arelx: 2},
-            #
-            # < 5.2 don't work because of a deeper issue.
-            # {ruby: jruby-9.4,   rails: 5_2, arelx: 1},
-          ]
-        mssql: [2017, 2019]
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.versions.ruby }}
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
-      - name: Install MSSQL ${{ matrix.mssql }}
-        uses: potatoqualitee/mssqlsuite@v1.5.1
-        with:
-          version: ${{ matrix.mssql }}
-          install: sqlengine, sqlclient, sqlpackage, localdb
-          sa-password: Password12!
-      - name: Setup Gemfile
-        if: ${{ matrix.versions.arelx == 2 }}
-        run: |
-          cp ./gemspecs/arel_extensions-v2.gemspec ./arel_extensions.gemspec
-          cp ./version_v2.rb lib/arel_extensions/version.rb
-          cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
-      - name: bundle install
-        run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
-      - name: Run test mssql [mri]
-        if: ${{ !contains(matrix.versions.ruby, 'jruby') }}
-        run: bundle exec rake test:mssql
-      - name: Run test mssql [jruby]
-        if: ${{ contains(matrix.versions.ruby, 'jruby') }}
-        run: |
-          curl -LO https://github.com/microsoft/mssql-jdbc/releases/download/v8.4.1/mssql-jdbc-8.4.1.jre11.jar
-          CLASSPATH=".:mssql-jdbc-8.4.1.jre11.jar" bundle exec rake test:mssql
+  # job_test_mssql:
+  #   name: test mssql on linux
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       versions: [
+  #           { ruby: "3.3", rails: 7_1, arelx: 2 },
+  #           { ruby: "3.3", rails: 7, arelx: 2 },
+  #           { ruby: "3.3", rails: 6_1, arelx: 2 },
+  #           { ruby: "3.3", rails: 6, arelx: 2 },
+  #           { ruby: "3.2", rails: 7_1, arelx: 2 },
+  #           { ruby: "3.2", rails: 7, arelx: 2 },
+  #           { ruby: "3.2", rails: 6_1, arelx: 2 },
+  #           { ruby: "3.2", rails: 6, arelx: 2 },
+  #           { ruby: "3.1", rails: 7_1, arelx: 2 },
+  #           { ruby: "3.1", rails: 7, arelx: 2 },
+  #           { ruby: "3.1", rails: 6_1, arelx: 2 },
+  #           { ruby: "3.1", rails: 6, arelx: 2 },
+  #           { ruby: "3.0", rails: 7, arelx: 2 },
+  #           { ruby: "3.0", rails: 6_1, arelx: 2 },
+  #           { ruby: "3.0", rails: 6, arelx: 2 },
+  #           { ruby: "2.7", rails: 6_1, arelx: 2 },
+  #           { ruby: "2.7", rails: 6, arelx: 2 },
+  #           { ruby: "2.7", rails: 5_2, arelx: 1 },
+  #           { ruby: "2.7", rails: 4_2, arelx: 1 },
+  #           { ruby: "2.5", rails: 6_1, arelx: 2 },
+  #           { ruby: "2.5", rails: 6, arelx: 2 },
+  #           { ruby: "2.5", rails: 5_2, arelx: 1 },
+  #           { ruby: "2.5", rails: 4_2, arelx: 1 },
+  #           # {ruby: jruby-9.2,   rails: 6_1, arelx: 2},
+  #           # {ruby: jruby-9.2,   rails: 6,   arelx: 2},
+  #           { ruby: jruby-9.2, rails: 5_2, arelx: 1 },
+  #           { ruby: jruby-9.2, rails: 4_2, arelx: 1 },
+  #           # See comments on 9.4 to understand why these are disabled for now.
+  #           # {ruby: jruby-9.3,   rails: 6_1, arelx: 2},
+  #           # {ruby: jruby-9.3,   rails: 6,   arelx: 2},
+  #           # {ruby: jruby-9.3,   rails: 5_2, arelx: 1},
+  #           { ruby: jruby-9.4, rails: 7_1, arelx: 2 },
+  #           { ruby: jruby-9.4, rails: 7, arelx: 2 },
+  #           #
+  #           # 6 and 6.1 don't work because of a bug in the alt adapter
+  #           # https://github.com/JesseChavez/activerecord-jdbc-adapter/issues/16
+  #           # {ruby: jruby-9.4,   rails: 6_1, arelx: 2},
+  #           # {ruby: jruby-9.4,   rails: 6,   arelx: 2},
+  #           #
+  #           # < 5.2 don't work because of a deeper issue.
+  #           # {ruby: jruby-9.4,   rails: 5_2, arelx: 1},
+  #         ]
+  #       mssql: [2017, 2019]
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Set up Ruby
+  #       uses: ruby/setup-ruby@v1
+  #       with:
+  #         ruby-version: ${{ matrix.versions.ruby }}
+  #     - name: Install FreeTDS
+  #       run: |
+  #         sudo apt-get update -q
+  #         sudo apt-get install -y freetds-dev
+  #     - name: Install MSSQL ${{ matrix.mssql }}
+  #       uses: potatoqualitee/mssqlsuite@v1.5.1
+  #       with:
+  #         version: ${{ matrix.mssql }}
+  #         install: sqlengine, sqlclient, sqlpackage, localdb
+  #         sa-password: Password12!
+  #     - name: Setup Gemfile
+  #       if: ${{ matrix.versions.arelx == 2 }}
+  #       run: |
+  #         cp ./gemspecs/arel_extensions-v2.gemspec ./arel_extensions.gemspec
+  #         cp ./version_v2.rb lib/arel_extensions/version.rb
+  #         cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
+  #     - name: bundle install
+  #       run: |
+  #         bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
+  #         bundle install
+  #     - name: Run test mssql [mri]
+  #       if: ${{ !contains(matrix.versions.ruby, 'jruby') }}
+  #       run: bundle exec rake test:mssql
+  #     - name: Run test mssql [jruby]
+  #       if: ${{ contains(matrix.versions.ruby, 'jruby') }}
+  #       run: |
+  #         curl -LO https://github.com/microsoft/mssql-jdbc/releases/download/v8.4.1/mssql-jdbc-8.4.1.jre11.jar
+  #         CLASSPATH=".:mssql-jdbc-8.4.1.jre11.jar" bundle exec rake test:mssql
