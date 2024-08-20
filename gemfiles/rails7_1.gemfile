@@ -3,6 +3,9 @@ source 'https://rubygems.org'
 gem 'rails', '~> 7.1'
 
 group :development, :test do
+  gem 'ruby-lsp'
+  gem 'debug'
+
   gem 'activesupport', '~> 7.1'
   gem 'activemodel', '~> 7.1'
   gem 'activerecord', '~> 7.1'
