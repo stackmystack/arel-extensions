@@ -64,3 +64,6 @@ alias y='yazi'
 
 eval "\$(atuin init bash --disable-up-arrow)"
 BASH
+
+# for java+mssql
+RUN curl -LO https://github.com/microsoft/mssql-jdbc/releases/download/v8.4.1/mssql-jdbc-8.4.1.jre11.jar

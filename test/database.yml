@@ -9,27 +9,27 @@ jdbc-sqlite:
   timeout: 500
 mysql:
   adapter: mysql2
-  database: arelx_test
+  database: <%= ENV.fetch('ARELX_DATABASE', 'arelx_test') %>
   username: root
   host: <%= ENV.fetch('MYSQL_HOST', '127.0.0.1') %>
   port: 3306
   encoding: utf8mb4
 jdbc-mysql:
   adapter: jdbcmysql
-  database: arelx_test
+  database: <%= ENV.fetch('ARELX_DATABASE', 'arelx_test') %>
   username: root
   encoding: utf8mb4
   host: <%= ENV.fetch('MYSQL_HOST', '127.0.0.1') %>
 postgresql:
   adapter: postgresql
-  database: arelx_test
+  database: <%= ENV.fetch('ARELX_DATABASE', 'arelx_test') %>
   username: postgres
   password: secret
   host: <%= ENV.fetch('POSTGRES_HOST', '127.0.0.1') %>
   port: 5432
 jdbc-postgresql:
   adapter: jdbcpostgresql
-  database: arelx_test
+  database: <%= ENV.fetch('ARELX_DATABASE', 'arelx_test') %>
   username: postgres
   password: secret
   host: <%= ENV.fetch('POSTGRES_HOST', '127.0.0.1') %>
@@ -51,6 +51,6 @@ ibm_db:
 mssql:
   adapter: sqlserver
   host: <%= ENV.fetch('MSSQL_HOST', 'localhost') %>
-  database: master
+  database: <%= ENV.fetch('ARELX_DATABASE', 'master') %>
   username: sa
   password: Password12!
