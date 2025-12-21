@@ -5,6 +5,7 @@ require 'etc'
 require 'thread'
 require 'fileutils'
 require 'securerandom'
+require 'shellwords'
 
 # --- Configuration ---
 
@@ -35,7 +36,6 @@ JRUBY_MSSQL_ALLOWED =
   }.freeze
 
 TASKS = %w[test:to_sql test:sqlite test:mysql test:postgresql test:mssql]
-# TASKS = %w[test:to_sql test:sqlite test:mysql test:postgresql test:mssql]
 
 # Docker detection
 IN_DOCKER = File.exist?('/.dockerenv') || File.exist?('/run/.containerenv')
@@ -159,101 +159,30 @@ def cleanup_workspace(workspace)
   FileUtils.rm_rf(workspace) if workspace && Dir.exist?(workspace)
 end
 
-# Generates a Ruby snippet to create/drop databases without Rails tasks
-def db_script_content(ruby_ver, rails_ver, adapter, action, db_name)
-  # Admin connection details based on your database.yml environment defaults
-  connection_config =
-    case adapter
-    when 'jdbc-postgresql'
-      <<~CONFIG
-        adapter: 'postgresql',
-        database: 'postgres',
-        host: ENV.fetch('POSTGRES_HOST', '127.0.0.1'),
-        password: 'secret',
-        port: 5432,
-        username: 'postgres',
-      CONFIG
-    when 'postgresql'
-      <<~CONFIG
-        adapter: 'postgresql',
-        database: 'postgres',
-        host: ENV.fetch('POSTGRES_HOST', '127.0.0.1'),
-        password: 'secret',
-        port: 5432,
-        user: 'postgres',
-      CONFIG
-    when 'mysql'
-      <<~CONFIG
-        adapter: 'mysql2',
-        host: ENV.fetch('MYSQL_HOST', '127.0.0.1'),
-        port: 3306,
-        user: 'root',
-      CONFIG
-    when 'jdbc-mysql'
-      <<~CONFIG
-       adapter: 'jdbcmysql',
-       host: ENV.fetch('MYSQL_HOST', '127.0.0.1'),
-       port: 3306,
-       username: 'root',
-      CONFIG
-    when 'sqlserver'
-      <<~CONFIG
-        adapter: 'sqlserver',
-        host: ENV.fetch('MSSQL_HOST', 'localhost'),
-        password: 'Password12!',
-        username: 'sa',
-      CONFIG
-    else
-      return nil
-    end
+# Determines which database setup script to use based on task type
+def db_setup_script_for_task(task)
+  case task
+  when /postgresql/ then 'test/db_setup_postgresql.rb'
+  when /mysql/      then 'test/db_setup_mysql.rb'
+  when /mssql/      then 'test/db_setup_mssql.rb'
+  else              nil
+  end
+end
 
-  operation = action == :create ? "create_database('#{db_name}')" : "drop_database('#{db_name}')"
-  requires =
-    case ruby_ver
-    when /\Ajruby-9.2/
-      res = <<~RUBY
-        require 'logger'
-        require 'active_record'
-      RUBY
-      if rails_ver == '5_2'
-        <<~RUBY
-          #{res}
-          require 'activerecord-jdbcsqlserver-adapter'
-        RUBY
-      else
-        res
-      end
+# Executes database setup/teardown script with appropriate environment variables
+def execute_db_script(ruby_ver, rails_ver, task, action, db_name)
+  script = db_setup_script_for_task(task)
+  return if script.nil?
 
-    when /\Ajruby/
-      <<~RUBY
-        require 'logger'
-        require 'active_record'
-      RUBY
+  action_str = action == :create ? 'create' : 'drop'
+  env_vars = {
+    'ARELX_DB_ACTION' => action_str,
+    'ARELX_DB_NAME' => db_name,
+    'RUBY_VERSION' => ruby_ver,
+    'RAILS_VERSION' => rails_ver,
+  }
 
-    else
-      <<~RUBY
-        require 'logger'
-        require 'active_record'
-        require 'activerecord-sqlserver-adapter'
-      RUBY
-    end
-
-
-  <<~RUBY
-    #{requires}
-
-    begin
-      ActiveRecord::Base.establish_connection(
-        #{connection_config}
-      )
-      ActiveRecord::Base.connection.#{operation}
-    rescue => e
-      puts "DB Operation failed: \#{e.message}"
-      puts ''
-      puts e.backtrace
-      exit(1)
-    end
-  RUBY
+  sh(env_vars) { "mise x ruby@#{ruby_ver} -- ruby #{script}" }
 end
 
 # --- Execution Logic ---
@@ -303,26 +232,9 @@ workers = (1..CPU_COUNT).map do
 
         workspace = prepare_workspace
 
-        # Determine DB strategy
+        # Determine if this task needs an isolated database
         db_name = "arelx_test_#{SecureRandom.hex(4)}"
-        adapter =
-          case task
-          when /postgresql/
-            'postgresql'
-          when /mysql/
-            'mysql'
-          when /mssql/
-            'sqlserver'
-          end
-
-        adapter =
-          if adapter !~ /sqlserver/ && ruby_ver.include?('jruby')
-            "jdbc-#{adapter}"
-          # elsif adapter =~ /sqlserver/ && ruby_ver.include?('java') && ruby_ver != 'jruby-9.4'
-          #   'mssql'
-          else
-            adapter
-          end
+        needs_isolated_db = task.match?(/mssql|mysql|postgresql/)
 
         top = {}.tap do |env|
           env['BUNDLE_GEMFILE'] = "./gemfiles/rails#{rails_ver}.gemfile"
@@ -339,38 +251,35 @@ workers = (1..CPU_COUNT).map do
 
           # Step 3: Install dependencies
           env(top) do
-            if adapter
-              setup_script = db_script_content(ruby_ver, rails_ver, adapter, :create, db_name)
-              teardown_script = db_script_content(ruby_ver, rails_ver, adapter, :drop, db_name)
-              File.write(File.join(workspace, "db_create.rb"), setup_script)
-              File.write(File.join(workspace, "db_drop.rb"), teardown_script)
-            end
-
-            sh { "mise x ruby@#{ruby_ver} -- bundle install --jobs=1" }
+            sh { "mise x ruby@#{ruby_ver} -- bundle install" }
 
             # Step 2: Setup database if needed
-            sh { "mise x ruby@#{ruby_ver} -- bundle exec ruby db_create.rb" } if adapter
+            if needs_isolated_db
+              execute_db_script(ruby_ver, rails_ver, task, :create, db_name)
+            end
 
             # Step 4: Run tests
             test_env = {}.tap do |env|
-              env["ARELX_DATABASE"] = db_name if adapter
+              env["ARELX_DATABASE"] = db_name if needs_isolated_db
             end
 
-            output, status =
-              sh(test_env, check: false) {
-                "mise x ruby@#{ruby_ver} -- bundle exec rake #{task}"
-              }
+            env(test_env) do
+              output, status =
+                sh(check: false) {
+                  "mise x ruby@#{ruby_ver} -- bundle exec rake #{task}"
+                }
 
-            atomic_log(ruby_ver, rails_ver, arelx_ver, task, status.success?, output)
+              atomic_log(ruby_ver, rails_ver, arelx_ver, task, status.success?, output)
 
-            # New: Trigger early stop on first failure
-            if !status.success? && early_exit
-              STOP_MUTEX.synchronize { stop_early = true }
-            end
+              # New: Trigger early stop on first failure
+              if !status.success? && early_exit
+                STOP_MUTEX.synchronize { stop_early = true }
+              end
 
-            # Step 5: Teardown database
-            if adapter
-              sh(test_env) { "mise x ruby@#{ruby_ver} -- bundle exec ruby db_drop.rb" }
+              # Step 5: Teardown database
+              if needs_isolated_db
+                execute_db_script(ruby_ver, rails_ver, task, :drop, db_name)
+              end
             end
           end
         end
