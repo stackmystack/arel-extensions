@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
+#
 # Setup or teardown MSSQL test databases
 #
 # Environment variables:
@@ -19,7 +21,7 @@ begin
 
   # Determine which extra requirement to load based on Ruby/Rails combination
   extra_req =
-    if ruby_version.match?(/\Ajruby-9.2/) && rails_version == '5_2'
+    if ruby_version.match?(/\Ajruby-9.2/) && rails_version == '5.2'
       'activerecord-jdbcsqlserver-adapter'
     elsif ruby_version.match?(/\Ajruby/)
       nil

@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
+#
 # Setup or teardown MySQL test databases
 #
 # Environment variables:

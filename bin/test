@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
+
 require 'json'
 require 'open3'
 require 'etc'
@@ -6,296 +8,289 @@ require 'thread'
 require 'fileutils'
 require 'securerandom'
 require 'shellwords'
+require 'optparse'
+require 'logger'
+require_relative 'test-matrix'
 
-# --- Configuration ---
+# ANSI color code mappings
+COLORS = {
+  red: 31,
+  green: 32,
+  yellow: 33,
+  cyan: 36,
+  white: 37,
+  default: 0
+}.freeze
 
-MATRIX =
-  {
-    "3.4" => %w[8_1 8 7_2 7_1 7 6_1],
-    "3.3" => %w[8_1 8 7_2 7_1 7 6_1],
-    "3.2" => %w[8_1 8 7_2 7_1 7 6_1 6],
-    "3.1" => %w[7_2 7_1 7 6_1 6],
-    "3.0" => %w[7_1 7 6_1 6],
-    "2.7" => %w[7_1 7 6_1 6 5_2],
-    "jruby-9.4" => %w[7_1 7],
-    "jruby-9.3"  => %w[6_1 6 5_2],
-    "jruby-9.2" => %w[6_1 6 5_2],
-  }
-  .transform_values { |rails_vers|
-    rails_vers.map { |r|
-      { rails: r, arelx: (r == '5_2' ? 1 : 2) }
-    }
-  }
-  .freeze
-
-# JRuby + MSSQL allowlist
-JRUBY_MSSQL_ALLOWED =
-  {
-    "jruby-9.2" => %w[5_2],
-    "jruby-9.4" => %w[7 7_1],
-  }.freeze
-
-TASKS = %w[test:to_sql test:sqlite test:mysql test:postgresql test:mssql]
-
-# Docker detection
-IN_DOCKER = File.exist?('/.dockerenv') || File.exist?('/run/.containerenv')
-
-# Use available processors, reserving 1 for system if possible
-PRINT_MUTEX = Mutex.new
-
-# Early Exit:
-# 1. Configuration flag, so TODO
-early_exit = false
-# 2. ealy exit enforcment
-stop_early = false
-STOP_MUTEX = Mutex.new
-
-# --- Helper Methods ---
-
-# Change directory context for a block
-def cd(dir)
-  # puts "\e[36m$ cd #{dir}\e[0m"
-  Thread.current[:dir_stack] ||= []
-  Thread.current[:dir_stack].push(dir)
-  begin
-    yield
-  ensure
-    Thread.current[:dir_stack].pop
+# String color extensions for terminal output
+class String
+  def red
+    colorize(COLORS[:red])
   end
-  # puts "\e[36m$ cd -\e[0m"
-end
 
-# Get current directory from thread-local stack
-def current_dir
-  Thread.current[:dir_stack]&.last
-end
+  def green
+    colorize(COLORS[:green])
+  end
 
-def env(vars = {})
-  Thread.current[:env_stack] ||= []
-  Thread.current[:env_stack].push(vars)
-  begin
-    yield
-  ensure
-    Thread.current[:env_stack].pop
+  def yellow
+    colorize(COLORS[:yellow])
+  end
+
+  def cyan
+    colorize(COLORS[:cyan])
+  end
+
+  def white
+    colorize(COLORS[:white])
+  end
+
+  def colorize(code)
+    "\e[#{code}m#{self}\e[0m"
   end
 end
 
-# Execute shell command with optional environment variables
-def sh(env_vars = {}, check: true)
-  cmd = yield
+# Schedules and executes test jobs in parallel using a work-stealing strategy.
+#
+# Workers pull jobs from a shared queue and execute them independently. Supports
+# fail-fast mode to stop on first failure and configurable thread count.
+class Scheduler
+  attr_reader :log
 
-  # Prepend cd if we're in a directory context
-  current = current_dir
-  full_cmd = if current
-    "cd #{current} && #{cmd}"
-  else
-    cmd
-  end
+  # Centralized logger with formatting and alignment capabilities
+  class Logger
+    attr_reader :log
 
-  # puts "\e[36m$ #{full_cmd}\e[0m"
+    def initialize
+      @log = ::Logger.new($stdout, level: :info)
+      @log.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    end
 
-  # Merge environment variables with inherited env
-  Thread.current[:env_stack] ||= []
-  merged_env =
-    Thread.current[:env_stack]
-      .reverse
-      .reduce(ENV.to_h) { |acc, e| acc.merge(e) }
-      .merge(env_vars)
+    # Log banner/announcement messages in cyan
+    def msg(text)
+      log.info(text.cyan)
+    end
 
-  output, status = Open3.capture2e(merged_env, full_cmd)
+    # Log warnings in yellow
+    def warn(text)
+      log.warn(text.yellow)
+    end
 
-  if check && !status.success?
-    puts "\e[31m[COMMAND FAILED - OUTPUT BELOW]\e[0m"
-    puts output
-    puts "\e[31m[END OUTPUT]\e[0m"
-    raise "Command failed (exit #{status.exitstatus}): #{cmd}"
-  end
+    # Log information in default color (white)
+    def info(text)
+      log.info(text)
+    end
 
-  [output, status]
-end
+    # Log errors in red
+    def error(text)
+      log.error(text.red)
+    end
 
-def log(msg, color = 36)
-  puts "\e[#{color}m[MATRIX] #{msg}\e[0m"
-end
+    # Log successful job execution
+    #
+    # @param job [Hash] job hash
+    # @return [void]
+    def success(job)
+      msg = format_job(job)
+      log.info("SUCCESS: #{msg}".green)
+    end
 
-def skip_job?(ruby_ver, rails_ver, task)
-  return false unless task =~ /mssql/ && ruby_ver.start_with?('jruby')
+    # Log failed job execution
+    #
+    # @param job [Hash] job hash
+    # @param output [String] command output
+    # @return [void]
+    def failure(job, output)
+      msg = format_job(job)
+      # Atomic write: combine all failure output into single log call
+      log.error("FAILURE: #{msg}\n#{output}\n#{'-' * 40}".red)
+    end
 
-  allowed_rails = JRUBY_MSSQL_ALLOWED[ruby_ver]
-  return true unless allowed_rails  # No entry = skip all mssql for this jruby
+    # Log job result (delegates to success or failure)
+    #
+    # @param job [Hash] job hash
+    # @param ok [Boolean] whether job succeeded
+    # @param output [String] command output
+    # @return [void]
+    def job(job, ok, output)
+      ok ? success(job) : failure(job, output)
+    end
 
-  !allowed_rails.include?(rails_ver)
-end
+    private
 
-def atomic_log(ruby, rails, arelx_ver, task, success, output)
-  PRINT_MUTEX.synchronize do
-    color = success ? 32 : 31
-    status_text = success ? "SUCCESS" : "FAILURE"
-    log("#{status_text}: Ruby #{ruby} | Rails #{rails} | v#{arelx_ver} | #{task}", color)
-
-    unless success
-      puts output
-      puts "-" * 40
+    # Format job information with proper alignment
+    #
+    # @param job [Hash] job hash
+    # @return [String] formatted job string
+    def format_job(job)
+      "ruby:#{job[:ruby]} rails:#{job[:rails]} task:#{job[:task]} arelx:#{job[:arelx]}"
     end
   end
-end
 
-# Creates an isolated environment for the thread to run in
-def prepare_workspace
-  # Create a unique temp directory inside /tmp
-  id = SecureRandom.hex(4)
-  workspace = "/tmp/arelx_run_#{id}"
-  FileUtils.mkdir_p(workspace)
+  # Initialize a new job scheduler with standard logging.
+  #
+  # @param filter [String, nil] Ruby version prefix to filter jobs
+  # @param fail_fast [Boolean] stop on first failure
+  # @param threads [Integer, nil] number of worker threads (defaults to CPU count - 1)
+  # @param container [Boolean, nil] whether to run in container (nil means not explicitly set)
+  def initialize(filter: nil, fail_fast: false, threads: nil, container: nil)
+    @filter = filter
+    @fail_fast = fail_fast
+    @threads = threads || [Etc.nprocessors - 1, 1].max
+    @container = container
+    @stop_mutex = Mutex.new
+    @stop_early = false
+    @log = Logger.new
+  end
 
-  files = Dir.glob('*') - %w[.git .ruby-lsp .bundle arel_extensions.gemspec]
-  FileUtils.cp_r(files, workspace)
+  # Execute all jobs using work-stealing scheduler.
+  #
+  # @return [void]
+  def run
+    jobs = Matrix.jobs(filter: @filter)
 
-  workspace
-ensure
-  # Fallback if copy fails
-end
+    queue = Queue.new
+    jobs.each { |job| queue << job }
 
-def cleanup_workspace(workspace)
-  FileUtils.rm_rf(workspace) if workspace && Dir.exist?(workspace)
-end
+    log.msg "Starting Matrix Execution for #{jobs.size} jobs inside container on #{@threads} Threads"
 
-# Determines which database setup script to use based on task type
-def db_setup_script_for_task(task)
-  case task
-  when /postgresql/ then 'test/db_setup_postgresql.rb'
-  when /mysql/      then 'test/db_setup_mysql.rb'
-  when /mssql/      then 'test/db_setup_mssql.rb'
-  else              nil
+    workers = spawn_workers(queue)
+    workers.each(&:join)
+
+    log.msg "Matrix Execution Complete"
+  end
+
+  private
+
+  # Spawn worker threads that pull jobs from the queue.
+  #
+  # @param queue [Queue] thread-safe queue of jobs
+  # @return [Array<Thread>] array of worker threads
+  def spawn_workers(queue)
+    (1..@threads).map do
+      Thread.new do
+        loop do
+          # Check for early stop before pulling a new job
+          @stop_mutex.synchronize { break if @stop_early }
+
+          begin
+            job = queue.pop(true)
+          rescue ThreadError
+            break
+          end
+
+          success = execute(job)
+
+          # Handle fail-fast mode
+          if !success && @fail_fast
+            @stop_mutex.synchronize { @stop_early = true }
+          end
+        end
+      end
+    end
+  end
+
+  # Execute a single job by delegating to test-tuple.
+  #
+  # @param job [Hash] job hash with :ruby, :rails, :arelx, :task keys
+  # @return [Boolean] true if job succeeded, false otherwise
+  def execute(job)
+    flags = job.flat_map { |k, v| ["--#{k}", v.to_s] }
+    flags << "--no-container" if !@container
+
+    output, status = Open3.capture2e("./bin/test-tuple", *flags)
+
+    log.job(job, status.success?, output)
+    status.success?
   end
 end
 
-# Executes database setup/teardown script with appropriate environment variables
-def execute_db_script(ruby_ver, rails_ver, task, action, db_name)
-  script = db_setup_script_for_task(task)
-  return if script.nil?
+# --- Argument Parsing ---
 
-  action_str = action == :create ? 'create' : 'drop'
-  env_vars = {
-    'ARELX_DB_ACTION' => action_str,
-    'ARELX_DB_NAME' => db_name,
-    'RUBY_VERSION' => ruby_ver,
-    'RAILS_VERSION' => rails_ver,
-  }
+options = {}
 
-  sh(env_vars) { "mise x ruby@#{ruby_ver} -- ruby #{script}" }
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: #{$0} [OPTIONS] [FILTER_ARG ...]"
+
+  opts.separator ""
+  opts.separator "FILTER EXAMPLES (pass each filter as separate argument):"
+  opts.separator "  #{$0}                              # All jobs"
+  opts.separator "  #{$0} ruby:3.2                     # Exact: Ruby 3.2"
+  opts.separator "  #{$0} ruby:3:                      # Prefix: All Ruby 3.x (3.0, 3.1, 3.2, ...)"
+  opts.separator "  #{$0} ruby:3.0:3.3                 # Range: Ruby 3.0 to 3.3 (inclusive)"
+  opts.separator "  #{$0} ruby:!3.2                    # Negated exact: All except Ruby 3.2"
+  opts.separator "  #{$0} ruby:!3:                     # Negated prefix: All except 3.x"
+  opts.separator "  #{$0} ruby:!3.0:3.3                # Negated range: All except 3.0-3.3"
+  opts.separator "  #{$0} ruby:3: rails:8              # Combined: Ruby 3.x + Rails 8"
+  opts.separator "  #{$0} task:postgresql              # Task shorthand (→ task:test:postgresql)"
+  opts.separator "  #{$0} test:sqlite                  # Test shorthand (→ task:test:sqlite)"
+  opts.separator "  #{$0} jruby:9.4                    # JRuby shorthand (→ ruby:jruby-9.4)"
+  opts.separator ""
+  opts.separator "FILTER DIMENSIONS:"
+  opts.separator "  ruby:<spec>      - By Ruby version (exact, prefix:, range:to, or negated with !)"
+  opts.separator "  jruby:<version>  - Shorthand for ruby:jruby-<version>"
+  opts.separator "  rails:<spec>     - By Rails version (same syntax as ruby)"
+  opts.separator "  arelx:<spec>     - By ArelExtensions version (same syntax as ruby)"
+  opts.separator "  task:<task>      - By test task (e.g., task:postgresql, task:test:sqlite)"
+  opts.separator "  test:<task>      - Shorthand for task:test:<task>"
+  opts.separator ""
+  opts.separator "VERSION SYNTAX (for ruby, rails, arelx):"
+  opts.separator "  3.2              - Exact match: 3.2"
+  opts.separator "  3:               - Prefix match: all versions starting with 3"
+  opts.separator "  3:3.3            - Range match: 3 to 3.3 (inclusive on both ends)"
+  opts.separator "  !3.2             - Negated exact: everything except 3.2"
+  opts.separator "  !3:              - Negated prefix: everything except 3.x"
+  opts.separator "  !3:3.3           - Negated range: everything except 3 to 3.3"
+  opts.separator ""
+  opts.separator "NOTES:"
+  opts.separator "  Each argument can contain multiple space-separated filters"
+  opts.separator "  All filters must match for a job to be included (AND logic)"
+  opts.separator "  Task/test shorthands are normalized: test:postgresql → task:test:postgresql"
+  opts.separator "   - test:postgresql → task:test:postgresql"
+  opts.separator "   - test:pg and test:postgres → task:test:postgresql"
+  opts.separator "   - test:my → task:test:mysql"
+  opts.separator "  JRuby shorthand is normalized: jruby:9.4 → ruby:jruby-9.4"
+  opts.separator ""
+
+  opts.on("--fail-fast", "Stop on first failure") do
+    options[:fail_fast] = true
+  end
+
+  opts.on("--threads N", Integer, "Number of parallel worker threads") do |n|
+    options[:threads] = n
+  end
+
+  opts.on("--[no-]container", "Run inside Docker container (default: true)") do |v|
+    options[:container] = v
+  end
+
+  opts.on("-h", "--help", "Show this help") do
+    puts opts
+    exit
+  end
 end
 
-# --- Execution Logic ---
+parser.parse!
 
-unless IN_DOCKER
-  log "Detected Host OS. Executing inside Docker container..."
+options[:filter] = ARGV if ARGV.any?
+
+# --- Docker Detection ---
+
+IN_DOCKER = File.exist?('/.dockerenv') || File.exist?('/run/.containerenv')
+
+if !IN_DOCKER && (!options.key?(:container) || options[:container])
+  log = Scheduler::Logger.new
+  log.msg "Detected Host OS. Executing inside Docker container..."
+
   args = ARGV.join(' ')
   exec "docker compose -f dev/compose.yaml exec arelx /app/bin/test #{args}"
 end
 
-queue = Queue.new
-target_rubies = ARGV.empty? ? MATRIX.keys : MATRIX.keys.select { |k| k.start_with?(ARGV[0]) }
+# --- Execution ---
 
-# Populate Queue
-target_rubies.each do |ruby_ver|
-  MATRIX[ruby_ver].each do |config|
-    TASKS.each do |task|
-      next if skip_job?(ruby_ver, config[:rails], task)
-      queue << config.merge(ruby: ruby_ver, task: task)
-    end
-  end
-end
-
-# We need to count processors inside docker.
-CPU_COUNT = [Etc.nprocessors - 1, 1].max.freeze
-log "Starting Matrix Execution inside Container on #{CPU_COUNT} Threads"
-
-workers = (1..CPU_COUNT).map do
-  Thread.new do
-    loop do
-      # Check for early stop before pulling a new job
-      STOP_MUTEX.synchronize { break if stop_early }
-
-      begin
-        job = queue.pop(true)
-      rescue ThreadError
-        break
-      end
-
-      workspace = nil
-
-      begin
-        ruby_ver  = job[:ruby]
-        rails_ver = job[:rails]
-        arelx_ver = job[:arelx]
-        task      = job[:task]
-
-        workspace = prepare_workspace
-
-        # Determine if this task needs an isolated database
-        db_name = "arelx_test_#{SecureRandom.hex(4)}"
-        needs_isolated_db = task.match?(/mssql|mysql|postgresql/)
-
-        top = {}.tap do |env|
-          env['BUNDLE_GEMFILE'] = "./gemfiles/rails#{rails_ver}.gemfile"
-          env['CLASSPATH'] = ".:mssql-jdbc-8.4.1.jre11.jar" if ruby_ver =~ /jruby/ && task =~ /mssql/
-          env['_JAVA_OPTIONS'] = "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED"
-        end
-
-        cd(workspace) do
-          # Step 1: Prepare workspace (gemspecs, versions, clean bundles)
-          sh { "mise trust" }
-          sh { "cp ./gemspecs/arel_extensions-v#{arelx_ver}.gemspec ./arel_extensions.gemspec" }
-          sh { "cp ./version_v#{arelx_ver}.rb ./lib/arel_extensions/version.rb" }
-          sh { "rm -rf Gemfile.lock ./gemfiles/*.lock .bundle" }
-
-          # Step 3: Install dependencies
-          env(top) do
-            sh { "mise x ruby@#{ruby_ver} -- bundle install" }
-
-            # Step 2: Setup database if needed
-            if needs_isolated_db
-              execute_db_script(ruby_ver, rails_ver, task, :create, db_name)
-            end
-
-            # Step 4: Run tests
-            test_env = {}.tap do |env|
-              env["ARELX_DATABASE"] = db_name if needs_isolated_db
-            end
-
-            env(test_env) do
-              output, status =
-                sh(check: false) {
-                  "mise x ruby@#{ruby_ver} -- bundle exec rake #{task}"
-                }
-
-              atomic_log(ruby_ver, rails_ver, arelx_ver, task, status.success?, output)
-
-              # New: Trigger early stop on first failure
-              if !status.success? && early_exit
-                STOP_MUTEX.synchronize { stop_early = true }
-              end
-
-              # Step 5: Teardown database
-              if needs_isolated_db
-                execute_db_script(ruby_ver, rails_ver, task, :drop, db_name)
-              end
-            end
-          end
-        end
-      rescue => e
-        atomic_log(ruby_ver, rails_ver, arelx_ver, task, false, "Job failed: #{e.message}\n#{e.backtrace.join("\n")}")
-
-        # New: Also trigger early stop if enabled (setup failures count as failures)
-        if early_exit
-          STOP_MUTEX.synchronize { stop_early = true }
-        end
-      ensure
-        cleanup_workspace(workspace) if workspace
-      end
-    end
-  end
-end
-
-workers.each(&:join)
-log "Matrix Execution Complete", 32
+scheduler = Scheduler.new(
+  filter: options[:filter],
+  fail_fast: options[:fail_fast],
+  threads: options[:threads],
+  container: options[:container]
+)
+scheduler.run

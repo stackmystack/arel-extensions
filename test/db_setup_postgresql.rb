@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
+#
 # Setup or teardown PostgreSQL test databases
 #
 # Environment variables:
@@ -14,7 +16,7 @@ begin
   action = ENV.fetch('ARELX_DB_ACTION', 'create')
   db_name = ENV.fetch('ARELX_DB_NAME')
   ruby_version = ENV.fetch('RUBY_VERSION', '')
-  
+
   # Determine which adapter config to use based on Ruby version
   adapter_key = ruby_version.include?('jruby') ? 'jdbc-postgresql' : 'postgresql'
 
