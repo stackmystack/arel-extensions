@@ -1,60 +1,53 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require 'json'
-require 'open3'
 require 'etc'
-require 'thread'
 require 'fileutils'
+require 'json'
+require 'logger'
+require 'open3'
+require 'optparse'
 require 'securerandom'
 require 'shellwords'
-require 'optparse'
-require 'logger'
+require 'thread'
 
-# Executes a single test job in an isolated workspace with database setup/teardown.
+require_relative 'test-matrix'
+
+# Executes a single test job in an isolated workspace with database setup/teardown, or executes SQL.
 #
 # Creates a temporary workspace, installs dependencies for the specified Ruby/Rails/ArelExtensions
-# version combination, runs the test task, and cleans up resources.
-#
-# @example Execute a PostgreSQL test
-#   executor = ExecTestTuple.new(ruby: "3.2", rails: "7.1", arelx: 2, task: "test:postgresql")
-#   exit_code = executor.execute
-#
-# @example Execute a SQLite test
-#   executor = ExecTestTuple.new(ruby: "3.3", rails: "8", arelx: 2, task: "test:sqlite")
-#   exit_code = executor.execute
+# version combination, runs the test task/SQL, and cleans up resources.
 class ExecTestTuple
-  # Exit code for successful test execution
-  EXIT_SUCCESS = 0
-  # Exit code for failed test execution
-  EXIT_FAILURE = 1
-
   # Initialize a new job executor.
   #
-  # @param ruby [String] Ruby version (e.g., "3.2", "jruby-9.4")
-  # @param rails [String] Rails version (e.g., "7.1", "8")
   # @param arelx [Integer] ArelExtensions version (1 or 2)
+  # @param log [Logger] logger instance
+  # @param rails [String] Rails version (e.g., "7.1", "8")
+  # @param ruby [String] Ruby version (e.g., "3.2", "jruby-9.4")
+  # @param sql [String, nil] SQL statement to execute instead of rake task
   # @param task [String] Rake task to execute (e.g., "test:postgresql", "test:mysql")
-  def initialize(ruby:, rails:, arelx:, task:)
-    @ruby = ruby
-    @rails = rails
+  def initialize(arelx:, log: nil, rails:, ruby:, sql: nil, task:)
+    p [__method__, arelx, rails, ruby, sql, task]
     @arelx = arelx
+    @log = log || setup_logger
+    @rails = rails
+    @ruby = ruby
+    @sql = sql
     @task = task
-    @dir_stack = []
     @env_stack = []
+    @dir_stack = []
     @workspace = nil
-    @log = Logger.new($stdout)
   end
 
   attr_reader :log
 
-  # Execute the test job.
+  # Execute the test job or SQL statement.
   #
   # Creates an isolated workspace, configures the environment, installs dependencies,
-  # sets up the database (if needed), runs the test task, tears down the database,
+  # sets up the database (if needed), runs the test task or SQL, tears down the database,
   # and cleans up the workspace.
   #
-  # @return [Integer] EXIT_SUCCESS (0) if tests pass, EXIT_FAILURE (1) if tests fail or error occurs
+  # @return [Boolean] true if execution succeeded, false otherwise
   def execute
     @workspace = prepare_workspace
     db_name = "arelx_test_#{SecureRandom.hex(4)}"
@@ -77,9 +70,13 @@ class ExecTestTuple
       env(top) do
         sh { "mise x ruby@#{@ruby} -- bundle install" }
 
-        # Step 3: Setup database if needed
+        # Step 3: Setup database
         if needs_isolated_db
+          return execute_sql if @sql
+
           execute_db_script(:create, db_name)
+        else
+          return execute_sql if @sql
         end
 
         # Step 4: Run tests
@@ -96,14 +93,14 @@ class ExecTestTuple
           end
 
           # Return based on test result
-          return status.success? ? EXIT_SUCCESS : EXIT_FAILURE
+          return status.success?
         end
       end
     end
 
   rescue => e
     STDERR.puts "Job failed: #{e.message}\n#{e.backtrace.join("\n")}"
-    return EXIT_FAILURE
+    return false
   ensure
     cleanup_workspace if @workspace
   end
@@ -158,10 +155,11 @@ class ExecTestTuple
   #
   # @param env_vars [Hash<String, String>] additional environment variables
   # @param fail [Boolean] whether to raise on command failure
+  # @param print [Boolean] whether to print successful command output
   # @yield command string to execute
   # @return [Array<(String, Process::Status)>] command output and process status
   # @raise [RuntimeError] if command fails and `fail` is true
-  def sh(env_vars = {}, fail: true)
+  def sh(env_vars = {}, fail: true, print: false)
     cmd = yield
 
     # Prepend cd if we're in a directory context
@@ -181,7 +179,9 @@ class ExecTestTuple
 
     output, status = Open3.capture2e(merged_env, full_cmd)
 
-    if !status.success?
+    if status.success?
+      log.info output if print
+    else
       log.error "[COMMAND FAILED - OUTPUT BELOW]"
       log.error output
       log.error "[END OUTPUT]"
@@ -219,6 +219,10 @@ class ExecTestTuple
 
   # Determine the database setup script path based on the task.
   #
+  # @note even if it's tempting to use the exec_sql_rb-style SQL generation and
+  #   execution here, we need to run full Ruby scripts to setup/teardown databases
+  #   to better control the debugging and avoid fiddling with program generators.
+  #   Data trumps "smartassiness".
   # @return [String, nil] path to the setup script, or nil for tasks without database setup
   def db_setup_script_for_task
     case @task
@@ -250,12 +254,41 @@ class ExecTestTuple
 
     sh(env_vars) { "mise x ruby@#{@ruby} -- bundle exec ruby #{script}" }
   end
+
+  # Execute SQL statement.
+  #
+  # Generates and executes inline Ruby code that connects to the database and runs SQL.
+  #
+  # @return [Boolean] true if execution succeeded, false otherwise
+  def execute_sql
+    if @task == 'test:to_sql'
+      log.error "test:to_sql is not supported for SQL execution"
+      return false
+    end
+
+    adapter = database_yaml_adapter_key(task: @task, ruby: @ruby)
+    log.info "Executing SQL with adapter: #{adapter}"
+
+    ruby_code = exec_sql_rb(adapter)
+    env_vars = { 'BUNDLE_GEMFILE' => "./gemfiles/rails#{@rails}.gemfile" }
+
+    begin
+      sh(env_vars, print: true) do
+        "mise x ruby@#{@ruby} -- bundle exec ruby -e #{Shellwords.escape(ruby_code)}"
+      end
+      true
+    rescue => e
+      log.error "SQL execution failed: #{e.message}"
+      false
+    end
+  end
 end
 
 # --- Argument Parsing ---
 
 # Preserve original arguments before parser modifies ARGV
 ARGVDUP = ARGV.dup.freeze
+log = setup_logger
 options = { container: true }
 
 parser = OptionParser.new do |opts|
@@ -277,68 +310,71 @@ parser = OptionParser.new do |opts|
     options[:task] = v
   end
 
+  opts.on("--sql SQL", "SQL statement to execute") do |v|
+    options[:sql] = v
+  end
+
   opts.on("--[no-]container", "Run inside Docker container (default: true)") do |v|
     options[:container] = v
   end
 
   opts.on("-h", "--help", "Prints this help") do
     puts opts
-    exit(ExecTestTuple::EXIT_SUCCESS)
+    exit(0)
   end
 end
 
-parser.parse!
+begin
+  parser.parse!(ARGV)
+rescue OptionParser::ParseError => e
+  warn "Option parsing failed: #{e.class}"
+  warn e.message
+  warn
+  warn parser.help
+  exit 1
+end
 
 # --- Docker Detection ---
 
-IN_DOCKER = File.exist?('/.dockerenv') || File.exist?('/run/.containerenv')
+if options[:container] && !in_container?
+  log.info "Detected Host OS. Executing inside Docker container..."
 
-if options[:container] && !IN_DOCKER
-  puts "Detected Host OS. Executing inside Docker container..."
-
-  # Filter out container-related flags from original args
-  args = ARGVDUP.reject { it.match?(/\A--(?:no-)?container\z/) }.join(' ')
+  args = ARGVDUP.map { Shellwords.escape(it) }.join(' ')
 
   exec "docker compose -f dev/compose.yaml exec arelx /app/bin/test-tuple #{args}"
 end
 
 # Check if we have flags or CSV positional argument
-if options.any? { |k, v| !k.end_with?('container') && v }
-  # Using flags - all must be present
-  if !(options[:ruby] && options[:rails] && options[:arelx] && options[:task])
-    puts "original_args = #{args}"
-    puts "options = #{options}"
-    STDERR.puts "Error: All options (--ruby, --rails, --arelx, --task) must be provided"
-    STDERR.puts parser.help
-    exit(ExecTestTuple::EXIT_FAILURE)
+ruby, rails, arelx, sql, task =
+  if ARGV.empty? && options.any? { |k, v| !k.end_with?('container') && v }
+    # Using flags - all must be present except --sql is optional
+    if !(options[:ruby] && options[:rails] && options[:arelx] && options[:task])
+      log.error "Error: All options (--ruby, --rails, --arelx, --task) must be provided"
+      log.error parser.help
+      return
+    end
+
+    options.values_at(:ruby, :rails, :arelx, :sql, :task)
+  elsif ARGV.length == 1
+    # Using CSV positional argument
+    parts = ARGV[0].split(',')
+
+    if parts.length != 4
+      log.error "Error: CSV must have exactly 4 values: ruby,rails,arelx,task"
+      return
+    end
+
+    [*parts[..-2], options[:sql],  parts[-1]]
   end
 
-  if ARGV.any?
-    STDERR.puts "Error: Cannot use both options and positional arguments"
-    STDERR.puts parser.help
-    exit(ExecTestTuple::EXIT_FAILURE)
-  end
-
-  ruby = options[:ruby]
-  rails = options[:rails]
-  arelx = options[:arelx]
-  task = options[:task]
-elsif ARGV.length == 1
-  # Using CSV positional argument
-  parts = ARGV[0].split(',')
-  if parts.length != 4
-    STDERR.puts "Error: CSV must have exactly 4 values: ruby,rails,arelx,task"
-    exit(ExecTestTuple::EXIT_FAILURE)
-  end
-
-  ruby, rails, arelx, task = parts
-else
-  STDERR.puts "Error: Provide either all options or a single CSV argument"
+p [ruby, rails, arelx, sql, task]
+if !(ruby && rails && arelx && task)
+  log.error "Error: Provide either all options or a single CSV argument"
   STDERR.puts parser.help
-  exit(ExecTestTuple::EXIT_FAILURE)
+  exit(1)
 end
 
 # --- Execution ---
 
-executor = ExecTestTuple.new(ruby: ruby, rails: rails, arelx: arelx.to_i, task: task)
+executor = ExecTestTuple.new(arelx: arelx.to_i, log:, rails:, ruby:, sql:, task:)
 exit(executor.execute)
