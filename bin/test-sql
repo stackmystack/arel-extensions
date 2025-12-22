@@ -23,52 +23,47 @@ require_relative 'test-matrix'
 # @example Execute SQL with JRuby and Rails 7.1
 #   ./bin/test-sql jruby:9.4 rails:7.1 --sql "SELECT version()"
 class ExecTestSql
-  # Exit code for successful execution
-  EXIT_SUCCESS = 0
-  # Exit code for failed execution
-  EXIT_FAILURE = 1
+  attr_reader :jobs, :log, :sql
 
   # Initialize a new SQL executor.
   #
   # @param jobs [Array<Hash>] array of job hashes with :ruby, :rails, :arelx, :task keys
-  # @param sql [String] SQL statement to execute
   # @param log [Logger] logger instance
-  def initialize(jobs:, sql:, log: nil)
+  # @param sql [String] SQL statement to execute
+  def initialize(jobs:, log: nil, sql:)
     @jobs = jobs
     @sql = sql
-    @log = log || Logger.new($stdout)
+    @log = log ||setup_logger
   end
-
-  attr_reader :log
 
   # Execute SQL against all matching jobs.
   #
   # Prepares the environment once (gems, versions, lockfiles),
   # then executes the SQL statement for each job.
   #
-  # @return [Integer] EXIT_SUCCESS if all executions succeed, EXIT_FAILURE otherwise
+  # @return [Boolean] true if all executions succeed, false otherwise
   def execute
-    if @jobs.empty?
+    if jobs.empty?
       log.error "No jobs matched the filter criteria"
-      return EXIT_FAILURE
+      return false
     end
 
-    log.info "Found #{@jobs.length} matching job(s)"
+    log.info "Found #{jobs.length} matching job(s)"
 
     # Execute SQL for each job
     all_success = true
-    @jobs.each do |job|
+    jobs.each do |job|
       begin
         prepare_environment(job[:ruby])
       rescue => e
         log.error "Environment preparation failed: #{e.message}"
-        return EXIT_FAILURE
+        return false
       end
       success = execute_sql_for_job(job)
-      all_success = false unless success
+      all_success = false if !success
     end
 
-    all_success ? EXIT_SUCCESS : EXIT_FAILURE
+    all_success
   end
 
   private
@@ -86,7 +81,7 @@ class ExecTestSql
     log.info "Preparing environment for Rails #{first_job[:rails]}"
 
     # Clean up lockfiles and bundle cache
-    sh { "rm -rf Gemfile.lock ./gemfiles/*.lock .bundle ./gemspecs/*.lock" }
+    sh { "rm -rf Gemfile.lock ./gemfiles/*.lock .bundle" }
 
     # Copy appropriate gemspec and version file
     sh { "cp ./gemspecs/arel_extensions-v#{first_job[:arelx]}.gemspec ./arel_extensions.gemspec" }
@@ -116,94 +111,30 @@ class ExecTestSql
 
     # Reject test:to_sql task
     if task == 'test:to_sql'
-      log.error "[#{ruby} Rails #{rails}] test:to_sql is not supported for SQL execution"
+      log.error "ruby:#{ruby} rails:#{rails} | test:to_sql is not supported for SQL execution"
       return false
     end
 
     # Determine adapter key based on task and Ruby version
-    adapter_key = determine_adapter_key(task, ruby)
+    adapter = database_yaml_adapter_key(task:, ruby:)
 
-    log.info "[#{ruby} Rails #{rails}] Executing SQL with adapter: #{adapter_key}"
+    log.info "ruby:#{ruby} rails:#{rails} | Executing SQL with adapter: #{adapter}"
 
     # Generate inline Ruby code
-    ruby_code = generate_ruby_code(adapter_key)
+    ruby_code = exec_sql_rb(adapter:)
 
     # Execute with mise and bundle exec
     env_vars = { 'BUNDLE_GEMFILE' => "./gemfiles/rails#{rails}.gemfile" }
 
     begin
-      sh(env_vars, fail: false, print: true) do
+      sh(env_vars, print: true) do
         "mise x ruby@#{ruby} -- bundle exec ruby -e #{Shellwords.escape(ruby_code)}"
       end
       true
     rescue => e
-      log.error "[#{ruby} Rails #{rails}] SQL execution failed: #{e.message}"
+      log.error "ruby:#{ruby} rails:#{rails} | SQL execution failed: #{e.message}"
       false
     end
-  end
-
-  # Determine the database adapter key based on task and Ruby version.
-  #
-  # @param task [String] task name (e.g., "test:sqlite", "test:mysql")
-  # @param ruby [String] Ruby version (e.g., "3.2", "jruby-9.4")
-  # @return [String] adapter key from database.yml
-  def determine_adapter_key(task, ruby)
-    db_type = task.sub('test:', '')
-    is_jruby = ruby.start_with?('jruby')
-
-    case db_type
-    when 'sqlite'
-      is_jruby ? 'jdbc-sqlite' : 'sqlite'
-    when 'mysql'
-      is_jruby ? 'jdbc-mysql' : 'mysql'
-    when 'postgresql'
-      is_jruby ? 'jdbc-postgresql' : 'postgresql'
-    when 'mssql'
-      'mssql'
-    else
-      raise "Unknown database type: #{db_type}"
-    end
-  end
-
-  # Generate inline Ruby code to execute SQL and print results.
-  #
-  # The generated code:
-  # 1. Loads necessary dependencies
-  # 2. Reads database configuration from test/database.yml
-  # 3. Establishes a database connection
-  # 4. Executes the provided SQL statement
-  # 5. Prints the results
-  #
-  # @param adapter_key [String] adapter key from database.yml
-  # @return [String] Ruby code to be executed with ruby -e
-  def generate_ruby_code(adapter_key)
-    <<~RUBY
-      require 'logger'
-      require 'active_record'
-      require 'erb'
-      require 'yaml'
-
-      # Load database configuration
-      yaml_content = ERB.new(File.read('test/database.yml')).result
-      config = YAML.load(yaml_content)['#{adapter_key}']
-
-      # Establish connection
-      ActiveRecord::Base.establish_connection(config)
-
-      # Execute SQL
-      result = ActiveRecord::Base.connection.execute(#{@sql.inspect})
-
-      # Print results
-      if result.is_a?(Integer)
-        puts "Rows affected: \#{result}"
-      elsif result.respond_to?(:each)
-        result.each do |row|
-          puts row.inspect
-        end
-      else
-        puts result.inspect
-      end
-    RUBY
   end
 
   # Execute a shell command with optional environment variables.
@@ -238,9 +169,8 @@ end
 
 # --- Argument Parsing ---
 
-# Preserve original arguments before parser modifies ARGV
-ARGVDUP = ARGV.dup.freeze
-options = { container: true, sql: nil }
+log = setup_logger
+options = { container: true }
 
 parser = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [FILTER_ARGS ...] --sql \"SQL_STATEMENT\""
@@ -301,34 +231,27 @@ filter_args = ARGV.dup
 
 # --- Docker Detection ---
 
-IN_DOCKER = File.exist?('/.dockerenv') || File.exist?('/run/.containerenv')
+if options[:container] && !in_container?
+  log.info "Detected Host OS. Executing inside Docker container..."
 
-if options[:container] && !IN_DOCKER
-  puts "Detected Host OS. Executing inside Docker container..."
+  args = Shellwords.escape(filter_args.join(' '))
+  args = "#{args} --sql #{Shellwords.escape(options[:sql])}" if options[:sql]
 
-  # Reconstruct the command line without container-related flags
-  # Build new args array with remaining filter args
-  args = ["--sql", Shellwords.escape(options[:sql])]
-  args.concat(filter_args) if filter_args.any?
-  args = args.join(' ')
-
-  exec "docker compose -f dev/compose.yaml exec arelx /app/bin/test-sql #{args}"
+  exec "docker compose -f dev/compose.yaml exec arelx /app/bin/test-sql #{args}"# #{opts}"
 end
 
 # --- Validation and Execution ---
 
-unless options[:sql]
-  STDERR.puts "Error: --sql option is required"
-  STDERR.puts parser.help
-  exit(ExecTestSql::EXIT_FAILURE)
+if !options[:sql]
+  log.error "Error: --sql option is required"
+  log.error parser.help
+
+  exit(1)
 end
 
-# Remaining args are filter specifications
-filter = filter_args.any? ? filter_args : nil
-
-# Get matching jobs
-jobs = Matrix.jobs(filter: filter)
+filter = filter_args if filter_args.any?
+jobs = Matrix.jobs(filter:)
 
 # Execute
-executor = ExecTestSql.new(jobs: jobs, sql: options[:sql])
+executor = ExecTestSql.new(jobs:, log:, sql: options[:sql])
 exit(executor.execute)

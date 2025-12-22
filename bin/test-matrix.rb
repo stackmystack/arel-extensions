@@ -5,6 +5,86 @@ require 'json'
 require 'optparse'
 require 'pp'
 
+def in_container? = File.exist?('/.dockerenv') || File.exist?('/run/.containerenv')
+
+def setup_logger
+  logger = Logger.new($stdout, progname: File.basename($0))
+  logger.formatter = SimpleFormatter.new
+  logger.level = Logger::INFO
+  logger
+end
+
+# Simple formatter for clean logging output
+class SimpleFormatter < Logger::Formatter
+  def call(severity, datetime, progname, msg)
+    container = ENV.fetch('CONTAINER_NAME', `cat /etc/hostname`.strip) if in_container?
+    container = "in [#{container}]" if container
+    "[#{progname}] #{container} #{msg}\n"
+  end
+end
+
+# Determine the database adapter key based on task and Ruby version.
+#
+# @param task [String] task name (e.g., "test:sqlite", "test:mysql")
+# @param ruby [String] Ruby version (e.g., "3.2", "jruby-9.4")
+# @return [String] adapter key from database.yml
+def database_yaml_adapter_key(task:, ruby:)
+  db_type = task.sub('test:', '')
+  is_jruby = ruby.start_with?('jruby')
+
+  case db_type
+  in 'sqlite'
+    is_jruby ? 'jdbc-sqlite' : 'sqlite'
+  in 'mysql'
+    is_jruby ? 'jdbc-mysql' : 'mysql'
+  in 'postgresql'
+    is_jruby ? 'jdbc-postgresql' : 'postgresql'
+  in 'mssql'
+    'mssql'
+  end
+end
+
+# Generate inline Ruby code to execute SQL and print results.
+#
+# The generated code:
+# 1. Loads necessary dependencies
+# 2. Reads database configuration from test/database.yml
+# 3. Establishes a database connection
+# 4. Executes the provided SQL statement
+# 5. Prints the results
+#
+# @param adapter [String] adapter key from database.yml
+# @return [String] Ruby code to be executed with ruby -e
+def exec_sql_rb(adapter)
+  <<~RUBY
+    require 'logger'
+    require 'active_record'
+    require 'erb'
+    require 'yaml'
+
+    # Load database configuration
+    yaml_content = ERB.new(File.read('test/database.yml')).result
+    config = YAML.load(yaml_content)['#{adapter}']
+
+    # Establish connection
+    ActiveRecord::Base.establish_connection(config)
+
+    # Execute SQL
+    result = ActiveRecord::Base.connection.execute(#{@sql.inspect})
+
+    # Print results
+    if result.is_a?(Integer)
+      puts "Rows affected: \#{result}"
+    elsif result.respond_to?(:each)
+      result.each do |row|
+        puts row.inspect
+      end
+    else
+      puts result.inspect
+    end
+  RUBY
+end
+
 # Handles version range matching with support for prefix matching, ranges, and negation.
 #
 # Supports the following syntax:
