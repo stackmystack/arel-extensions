@@ -28,46 +28,35 @@ services:
   mysql:
     image: mysql:8.0
     container_name: arelx-mysql
-    platform: linux/amd64
     environment:
       MYSQL_DATABASE: arelx_test
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
-    command:
-      [
-        "--character-set-server=utf8mb4",
-      ]
+    # command:
+    #   [
+    #     "--default-authentication-plugin=mysql_native_password",
+    #     "--character-set-server=utf8mb4",
+    #   ]
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost || exit 1"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # mysql:
-  #   image: mysql:8.0
-  #   container_name: arelx-mysql
-  #   environment:
-  #     MYSQL_DATABASE: arelx_test
-  #     MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
-  #   command:
-  #     [
-  #       "--default-authentication-plugin=mysql_native_password",
-  #       "--character-set-server=utf8mb4",
-  #     ]
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "mysqladmin ping -h localhost"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
-
   postgres:
-    build:
-      context: ..
-      dockerfile: dev/postgres.dockerfile
+    # build:
+    #   context: ..
+    #   dockerfile: dev/postgres.dockerfile
+    image: postgres:16
     container_name: arelx-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: secret
       POSTGRES_DB: arelx_test
+    command: >
+      bash -c "
+      locale-gen fr_FR.utf8 && update-locale &&
+      localedef -i fr_FR -c -f UTF-8 -A /usr/share/locale/locale.alias fr_FR.UTF-8 &&
+      docker-entrypoint.sh postgres"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
