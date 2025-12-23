@@ -132,7 +132,9 @@ module VersionRange
   # @param upper [String] the upper bound (inclusive)
   # @return [Boolean] true if version is in range
   def self.between?(lower, value, upper)
-    l, o, u = [lower, value, upper].map { normalize(it) }
+    l, o, u = [lower, value, upper].map {
+      Gem::Version.new(it.sub(/\Ajruby-/, ''))
+    }
     l <= o && o <= u
   end
 
@@ -141,11 +143,11 @@ module VersionRange
   #
   # @param version [String] the version string to normalize
   # @return [Gem::Version] the normalized version for comparison
-  def self.normalize(version)
-    # Strip jruby- prefix if present
-    base = version.start_with?('jruby-') ? version.sub('jruby-', '') : version
-    Gem::Version.new(base)
-  end
+  # def self.normalize(version)
+  #   # Strip jruby- prefix if present
+  #   base = version.start_with?('jruby-') ? version.sub('jruby-', '') : version
+  #   Gem::Version.new(base)
+  # end
 end
 
 # Parses filter strings and generates predicate functions for job filtering.
