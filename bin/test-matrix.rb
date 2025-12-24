@@ -426,10 +426,10 @@ module Matrix
 end
 
 if __FILE__ == $PROGRAM_NAME
-  require "minitest/autorun"
-  require "minitest/spec"
+  require 'minitest/autorun'
+  require 'minitest/spec'
 
-  describe "VersionRange" do
+  describe 'VersionRange' do
     # [Spec,        [Matching Versions],  [Non-Matching Versions]]
     [
       ["3.2",        %w[3.2],             %w[3.3 3.2.1]],
@@ -450,8 +450,8 @@ if __FILE__ == $PROGRAM_NAME
     end
   end
 
-  describe "FilterParser" do
-    describe "Normalization" do
+  describe 'FilterParser' do
+    describe 'Normalization' do
       let(:defaults) { { ruby: "3.2", rails: "8", task: "test:sqlite", arelx: 2 } }
       # [Filter String,     Matching Task,                      Non-Matching Task]
       [
@@ -496,7 +496,7 @@ if __FILE__ == $PROGRAM_NAME
       end
     end
 
-    describe "Input Formats" do
+    describe 'Input Formats' do
       let(:job) { { ruby: "3.2", rails: "8" } }
 
       [
@@ -511,8 +511,8 @@ if __FILE__ == $PROGRAM_NAME
     end
   end
 
-  describe "Matrix" do
-    it "skips invalid JRuby+MSSQL" do
+  describe 'Matrix' do
+    it 'skips invalid JRuby+MSSQL' do
       assert_empty Matrix.jobs(filter: "jruby:9.4 rails:6.1 task:mssql")
       refute_empty Matrix.jobs(filter: "jruby:9.4 rails:7.1 task:mssql")
     end

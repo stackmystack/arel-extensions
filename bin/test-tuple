@@ -54,16 +54,16 @@ class ExecTestTuple
 
     top = {}.tap do |env|
       env['BUNDLE_GEMFILE'] = "./gemfiles/rails#{@rails}.gemfile"
-      env['CLASSPATH'] = ".:mssql-jdbc-8.4.1.jre11.jar" if @ruby =~ /jruby/ && @task =~ /mssql/
-      env['_JAVA_OPTIONS'] = "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED"
+      env['CLASSPATH'] = '.:mssql-jdbc-8.4.1.jre11.jar' if @ruby =~ /jruby/ && @task =~ /mssql/
+      env['_JAVA_OPTIONS'] = '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED'
     end
 
     cd(@workspace) do
       # Step 1: Prepare workspace (gemspecs, versions, clean bundles)
-      sh { "mise trust" }
+      sh { 'mise trust' }
       sh { "cp ./gemspecs/arel_extensions-v#{@arelx}.gemspec ./arel_extensions.gemspec" }
       sh { "cp ./version_v#{@arelx}.rb ./lib/arel_extensions/version.rb" }
-      sh { "rm -rf Gemfile.lock ./gemfiles/*.lock .bundle" }
+      sh { 'rm -rf Gemfile.lock ./gemfiles/*.lock .bundle' }
 
       # Step 2: Install dependencies
       env(top) do
@@ -80,7 +80,7 @@ class ExecTestTuple
 
         # Step 4: Run tests
         test = {}.tap do |env|
-          env["ARELX_DATABASE"] = db_name if needs_isolated_db
+          env['ARELX_DATABASE'] = db_name if needs_isolated_db
         end
 
         env(test) do
@@ -182,9 +182,9 @@ class ExecTestTuple
     if status.success?
       log.info output if print
     else
-      log.error "[COMMAND FAILED - OUTPUT BELOW]"
+      log.error '[COMMAND FAILED - OUTPUT BELOW]'
       log.error output
-      log.error "[END OUTPUT]"
+      log.error '[END OUTPUT]'
 
       raise "Command failed (exit #{status.exitstatus}): #{cmd}" if fail
     end
@@ -204,6 +204,7 @@ class ExecTestTuple
     workspace = "/tmp/arelx_run_#{id}"
     FileUtils.mkdir_p(workspace)
 
+    # TODO: exclude .git too when we get rid of arelx:1
     files = Dir.glob('*') - %w[.ruby-lsp .bundle arel_extensions.gemspec]
     FileUtils.cp_r(files, workspace)
 
@@ -262,7 +263,7 @@ class ExecTestTuple
   # @return [Boolean] true if execution succeeded, false otherwise
   def execute_sql
     if @task == 'test:to_sql'
-      log.error "test:to_sql is not supported for SQL execution"
+      log.error 'test:to_sql is not supported for SQL execution'
       return false
     end
 
@@ -294,31 +295,31 @@ options = { container: true }
 parser = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [OPTIONS] or #{$0} <ruby,rails,arelx,task>"
 
-  opts.on("--ruby RUBY", "Ruby version") do |v|
+  opts.on('--ruby RUBY', 'Ruby version') do |v|
     options[:ruby] = v
   end
 
-  opts.on("--rails RAILS", "Rails version") do |v|
+  opts.on('--rails RAILS', 'Rails version') do |v|
     options[:rails] = v
   end
 
-  opts.on("--arelx ARELX", "Arel Extensions version") do |v|
+  opts.on('--arelx ARELX', 'Arel Extensions version') do |v|
     options[:arelx] = v
   end
 
-  opts.on("--task TASK", "Task to run") do |v|
+  opts.on('--task TASK', 'Task to run') do |v|
     options[:task] = v
   end
 
-  opts.on("--sql SQL", "SQL statement to execute") do |v|
+  opts.on('--sql SQL', 'SQL statement to execute') do |v|
     options[:sql] = v
   end
 
-  opts.on("--[no-]container", "Run inside Docker container (default: true)") do |v|
+  opts.on('--[no-]container', 'Run inside Docker container (default: true)') do |v|
     options[:container] = v
   end
 
-  opts.on("-h", "--help", "Prints this help") do
+  opts.on('-h', '--help', 'Prints this help') do
     puts opts
     exit(0)
   end
@@ -344,7 +345,7 @@ ruby, rails, arelx, sql, task =
   if ARGV.empty? && options.any? { |k, v| !k.end_with?('container') && v }
     # Using flags - all must be present except --sql is optional
     if !(options[:ruby] && options[:rails] && options[:arelx] && options[:task])
-      log.error "All options (--ruby, --rails, --arelx, --task) must be provided"
+      log.error 'All options (--ruby, --rails, --arelx, --task) must be provided'
       log.error parser.help
       return
     end
@@ -355,7 +356,7 @@ ruby, rails, arelx, sql, task =
     parts = ARGV[0].split(',')
 
     if parts.length != 4
-      log.error "CSV must have exactly 4 values: ruby,rails,arelx,task"
+      log.error 'CSV must have exactly 4 values: ruby,rails,arelx,task'
       return
     end
 
@@ -363,7 +364,7 @@ ruby, rails, arelx, sql, task =
   end
 
 if !(ruby && rails && arelx && task)
-  log.error "Provide either all options or a single CSV argument"
+  log.error 'Provide either all options or a single CSV argument'
   puts parser.help
   exit(1)
 end
