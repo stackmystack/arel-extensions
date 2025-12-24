@@ -114,10 +114,11 @@ class Scheduler
 
     queue = Queue.new
     jobs.each { |job| queue << job }
+    nworkers = [jobs.size, @threads].min
 
-    log.msg "Starting Matrix Execution for #{jobs.size} jobs inside container on #{@threads} Threads"
+    log.msg "Starting Matrix Execution for #{jobs.size} jobs inside container on #{nworkers} workers"
 
-    workers = spawn_workers(queue)
+    workers = spawn_workers(queue, nworkers)
     workers.each(&:join)
 
     log.msg "Matrix Execution Complete"
@@ -129,8 +130,8 @@ class Scheduler
   #
   # @param queue [Queue] thread-safe queue of jobs
   # @return [Array<Thread>] array of worker threads
-  def spawn_workers(queue)
-    (1..@threads).map do
+  def spawn_workers(queue, nworkers)
+    (1..nworkers).map do
       Thread.new do
         loop do
           # Check for early stop before pulling a new job
