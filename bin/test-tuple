@@ -337,7 +337,7 @@ end
 # --- Docker Detection ---
 
 if options[:container] && !in_container?
-  log.info "Detected Host OS. Executing inside Docker container..."
+  log.info 'Detected Host OS. Running in container…'
 
   args = ARGVDUP.map { Shellwords.escape(it) }.join(' ')
 

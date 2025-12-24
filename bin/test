@@ -116,9 +116,9 @@ class Scheduler
     jobs.each { |job| queue << job }
     nworkers = [jobs.size, @threads].min
 
-    log.msg "Starting Matrix Execution for #{jobs.size} jobs inside container on #{nworkers} workers"
+    log.msg "Running #{jobs.size} job#{jobs.size != 1 ? 's' : ''} with #{nworkers} workers"
 
-    workers = spawn_workers(queue, nworkers)
+    workers = spawn(queue, nworkers)
     workers.each(&:join)
 
     log.msg "Matrix Execution Complete"
@@ -130,7 +130,7 @@ class Scheduler
   #
   # @param queue [Queue] thread-safe queue of jobs
   # @return [Array<Thread>] array of worker threads
-  def spawn_workers(queue, nworkers)
+  def spawn(queue, nworkers)
     (1..nworkers).map do
       Thread.new do
         loop do
@@ -242,9 +242,9 @@ options[:filter] = ARGV if ARGV.any?
 
 
 if !in_container? && (!options.key?(:container) || options[:container])
-  log.msg "Detected Host OS. Executing inside Docker container..."
+  log.msg 'Detected Host OS. Running in container…'
 
-  args = ARGV.join(' ')
+  args = ARGV.map { Shellwords.escape(it) }.join(' ')
   exec "docker compose -f dev/compose.yaml exec arelx /app/bin/test #{args}"
 end
 

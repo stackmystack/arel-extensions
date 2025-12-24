@@ -232,7 +232,7 @@ filter_args = ARGV.dup
 # --- Docker Detection ---
 
 if options[:container] && !in_container?
-  log.info "Detected Host OS. Executing inside Docker container..."
+  log.info "Detected Host OS. Running in container…"
 
   args = Shellwords.escape(filter_args.join(' '))
   args = "#{args} --sql #{Shellwords.escape(options[:sql])}" if options[:sql]
