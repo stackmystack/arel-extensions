@@ -1,12 +1,5 @@
 name: Build and Test
 
-# Ruby + Rails Compatibility Matrix from here:
-# https://www.fastruby.io/blog/ruby/rails/versions/compatibility-table.html
-#
-# Images are fixed to ubuntu 22.04 because jruby-9.2 is unavailable in
-# ubuntu-24.04 (ubuntu-latest when I tested). Also, for rails < 6, sqlite3
-# will not build because libsqlite3-dev is missing.
-
 on:
   push:
     branches:
@@ -14,439 +7,137 @@ on:
   pull_request:
     branches:
       - master
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/arel-extensions
 
 jobs:
-  job_test_to_sql:
-    name: test to_sql
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        versions:
-          [
-            { ruby: "3.4", rails: 8_1, arelx: 2 },
-            { ruby: "3.4", rails: 8, arelx: 2 },
-            { ruby: "3.4", rails: 7_2, arelx: 2 },
-            { ruby: "3.4", rails: 7_1, arelx: 2 },
-            { ruby: "3.4", rails: 7, arelx: 2 },
-            { ruby: "3.4", rails: 6_1, arelx: 2 },
-            { ruby: "3.3", rails: 8_1, arelx: 2 },
-            { ruby: "3.3", rails: 8, arelx: 2 },
-            { ruby: "3.3", rails: 7_2, arelx: 2 },
-            { ruby: "3.3", rails: 7_1, arelx: 2 },
-            { ruby: "3.3", rails: 7, arelx: 2 },
-            { ruby: "3.3", rails: 6_1, arelx: 2 },
-            { ruby: "3.2", rails: 8_1, arelx: 2 },
-            { ruby: "3.2", rails: 8, arelx: 2 },
-            { ruby: "3.2", rails: 7_2, arelx: 2 },
-            { ruby: "3.2", rails: 7_1, arelx: 2 },
-            { ruby: "3.2", rails: 7, arelx: 2 },
-            { ruby: "3.2", rails: 6, arelx: 2 },
-            { ruby: "3.2", rails: 6_1, arelx: 2 },
-            { ruby: "3.1", rails: 7_2, arelx: 2 },
-            { ruby: "3.1", rails: 7_1, arelx: 2 },
-            { ruby: "3.1", rails: 7, arelx: 2 },
-            { ruby: "3.1", rails: 6_1, arelx: 2 },
-            { ruby: "3.1", rails: 6, arelx: 2 },
-            { ruby: "3.0", rails: 7_1, arelx: 2 },
-            { ruby: "3.0", rails: 7, arelx: 2 },
-            { ruby: "3.0", rails: 6_1, arelx: 2 },
-            { ruby: "2.7", rails: 7_1, arelx: 2 },
-            { ruby: "2.7", rails: 7, arelx: 2 },
-            { ruby: "2.7", rails: 6_1, arelx: 2 },
-            { ruby: "2.7", rails: 6, arelx: 2 },
-            { ruby: "2.7", rails: 5_2, arelx: 1 },
-            { ruby: jruby-9.2, rails: 6_1, arelx: 2 },
-            { ruby: jruby-9.2, rails: 6, arelx: 2 },
-            { ruby: jruby-9.2, rails: 5_2, arelx: 1 },
-            { ruby: jruby-9.3, rails: 6_1, arelx: 2 },
-            { ruby: jruby-9.3, rails: 6, arelx: 2 },
-            { ruby: jruby-9.3, rails: 5_2, arelx: 1 },
-          ]
+  build_image:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      docker_image: ${{ steps.determine_tag.outputs.docker_image }}
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@v4
         with:
-          ruby-version: ${{ matrix.versions.ruby }}
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
-      - name: Setup Gemfile
-        run: |
-          cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
-          cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
-          cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
-      - name: bundle install
-        run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
-      - name: Run test to_sql
-        run: bundle exec rake test:to_sql
+          fetch-depth: 0
 
-  job_test_sqlite:
-    name: test sqlite
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        versions:
-          [
-            { ruby: "3.4", rails: 8_1, arelx: 2 },
-            { ruby: "3.4", rails: 8, arelx: 2 },
-            { ruby: "3.4", rails: 7_2, arelx: 2 },
-            { ruby: "3.4", rails: 7_1, arelx: 2 },
-            { ruby: "3.4", rails: 7, arelx: 2 },
-            { ruby: "3.4", rails: 6_1, arelx: 2 },
-            { ruby: "3.3", rails: 8_1, arelx: 2 },
-            { ruby: "3.3", rails: 8, arelx: 2 },
-            { ruby: "3.3", rails: 7_2, arelx: 2 },
-            { ruby: "3.3", rails: 7_1, arelx: 2 },
-            { ruby: "3.3", rails: 7, arelx: 2 },
-            { ruby: "3.3", rails: 6_1, arelx: 2 },
-            { ruby: "3.2", rails: 8_1, arelx: 2 },
-            { ruby: "3.2", rails: 8, arelx: 2 },
-            { ruby: "3.2", rails: 7_2, arelx: 2 },
-            { ruby: "3.2", rails: 7_1, arelx: 2 },
-            { ruby: "3.2", rails: 7, arelx: 2 },
-            { ruby: "3.2", rails: 6_1, arelx: 2 },
-            { ruby: "3.2", rails: 6, arelx: 2 },
-            { ruby: "3.1", rails: 7_2, arelx: 2 },
-            { ruby: "3.1", rails: 7_1, arelx: 2 },
-            { ruby: "3.1", rails: 7, arelx: 2 },
-            { ruby: "3.1", rails: 6, arelx: 2 },
-            { ruby: "3.1", rails: 6_1, arelx: 2 },
-            { ruby: "3.0", rails: 7_1, arelx: 2 },
-            { ruby: "3.0", rails: 7, arelx: 2 },
-            { ruby: "3.0", rails: 6_1, arelx: 2 },
-            { ruby: "2.7", rails: 7_1, arelx: 2 },
-            { ruby: "2.7", rails: 7, arelx: 2 },
-            { ruby: "2.7", rails: 6_1, arelx: 2 },
-            { ruby: "2.7", rails: 6, arelx: 2 },
-            { ruby: "2.7", rails: 5_2, arelx: 1 },
-            { ruby: jruby-9.2, rails: 6_1, arelx: 2 },
-            { ruby: jruby-9.2, rails: 6, arelx: 2 },
-            { ruby: jruby-9.2, rails: 5_2, arelx: 1 },
-            { ruby: jruby-9.3, rails: 6_1, arelx: 2 },
-            { ruby: jruby-9.3, rails: 6, arelx: 2 },
-            { ruby: jruby-9.3, rails: 5_2, arelx: 1 },
-          ]
+      - name: Detect file changes
+        id: changed-files
+        uses: tj-actions/changed-files@v40
+        with:
+          files: |
+            dev/arelx.dockerfile
+            mise.toml
+
+      - name: Set up Docker Buildx
+        # Run if files changed OR if manually triggered
+        if: steps.changed-files.outputs.any_changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: steps.changed-files.outputs.any_changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        if: steps.changed-files.outputs.any_changed == 'true' || github.event_name == 'workflow_dispatch'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=pr-${{ github.event.number }},enable=${{ github.event_name == 'pull_request' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=sha
+
+      - name: Build and push Docker image
+        if: steps.changed-files.outputs.any_changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./dev/arelx.dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # FIX: Output json so we can parse specific tags if needed,
+          # though we handle tag logic in the next step manually for clarity.
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      # FIX: Consolidated logic to determine exactly which tag the Test job should use.
+      # This handles the "Unchanged = latest" vs "Changed = pr-number/sha" logic centrally.
+      - name: Determine downstream image tag
+        id: determine_tag
+        run: |
+          if [ "${{ steps.changed-files.outputs.any_changed }}" == "true" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            if [ "${{ github.event_name }}" == "pull_request" ]; then
+              echo "docker_image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
+            else
+              echo "docker_image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "No changes detected. Fallback to latest."
+            echo "docker_image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+          fi
+
+  test:
+    name: Test suite
+    runs-on: ubuntu-latest
+    needs: build_image
+    permissions:
+      packages: read
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.versions.ruby }}
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
-      - name: Setup Gemfile
-        run: |
-          cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
-          cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
-          cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
-      - name: bundle install
-        run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
-      - name: Run test sqlite
-        run: bundle exec rake test:sqlite
+      - uses: actions/checkout@v4
 
-  job_test_postgres:
-    name: test postgres
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        versions: [
-            { ruby: "3.4", rails: 8_1, arelx: 2 },
-            { ruby: "3.4", rails: 8, arelx: 2 },
-            { ruby: "3.4", rails: 7_2, arelx: 2 },
-            { ruby: "3.4", rails: 7_1, arelx: 2 },
-            { ruby: "3.4", rails: 7, arelx: 2 },
-            { ruby: "3.4", rails: 6_1, arelx: 2 },
-            { ruby: "3.3", rails: 8_1, arelx: 2 },
-            { ruby: "3.3", rails: 8, arelx: 2 },
-            { ruby: "3.3", rails: 7_2, arelx: 2 },
-            { ruby: "3.3", rails: 7_1, arelx: 2 },
-            { ruby: "3.3", rails: 7, arelx: 2 },
-            { ruby: "3.3", rails: 6_1, arelx: 2 },
-            { ruby: "3.2", rails: 8_1, arelx: 2 },
-            { ruby: "3.2", rails: 8, arelx: 2 },
-            { ruby: "3.2", rails: 7_2, arelx: 2 },
-            { ruby: "3.2", rails: 7_1, arelx: 2 },
-            { ruby: "3.2", rails: 7, arelx: 2 },
-            { ruby: "3.2", rails: 6_1, arelx: 2 },
-            # { ruby: "3.2", rails: 6, arelx: 2 }, # cannot test > undefined symbol: rb_tainted_str_new2
-            { ruby: "3.1", rails: 7_2, arelx: 2 },
-            { ruby: "3.1", rails: 7_1, arelx: 2 },
-            { ruby: "3.1", rails: 7, arelx: 2 },
-            { ruby: "3.1", rails: 6_1, arelx: 2 },
-            { ruby: "3.1", rails: 6, arelx: 2 },
-            { ruby: "3.0", rails: 7_1, arelx: 2 },
-            { ruby: "3.0", rails: 7, arelx: 2 },
-            { ruby: "3.0", rails: 6_1, arelx: 2 },
-            { ruby: "2.7", rails: 7_1, arelx: 2 },
-            { ruby: "2.7", rails: 7, arelx: 2 },
-            { ruby: "2.7", rails: 6_1, arelx: 2 },
-            { ruby: "2.7", rails: 6, arelx: 2 },
-            { ruby: "2.7", rails: 5_2, arelx: 1 },
-            { ruby: jruby-9.2, rails: 6_1, arelx: 2 },
-            { ruby: jruby-9.2, rails: 6, arelx: 2 },
-            { ruby: jruby-9.2, rails: 5_2, arelx: 1 },
-            { ruby: jruby-9.3, rails: 6_1, arelx: 2 },
-            { ruby: jruby-9.3, rails: 6, arelx: 2 },
-            { ruby: jruby-9.3, rails: 5_2, arelx: 1 },
-          ]
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and Prepare Image
+        run: |
+          # Pull the exact artifact from previous job
+          docker pull ${{ needs.build_image.outputs.docker_image }}
+          docker tag ${{ needs.build_image.outputs.docker_image }} arelx-matrix:latest
+
+      - name: Start Environment
+        run: |
+          # --wait pauses script until healthchecks pass.
+          docker compose -f .github/compose.yaml up -d --wait
+
+      - name: Run Tests
+        run: |
+          docker compose -f .github/compose.yaml exec -T arelx \
+             bash -c "ls && pwd"
+
+          docker compose -f .github/compose.yaml exec -T arelx \
+            /app/bin/test ruby:3.4 rails:8
+
+  cleanup:
+    name: Clean up PR image
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
     steps:
-      - uses: actions/checkout@v2
-        # PostgreSQL requires locales to be installed on the system to be able
-        # to do time and currency conversions at runtime.
-        #
-        # That's why we're not launching it as a service; pre-built images
-        # lack loaclization.
-        #
-        # After we install locales, we'll install PostgreSQL binaries and start
-        # the service.
-      - name: setup locale
-        run: |
-          sudo locale-gen fr_FR.utf8
-          sudo update-locale
-      - name: setup postgres 11
-        run: |
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc|sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
-          echo "deb http://apt.postgresql.org/pub/repos/apt/ `lsb_release -cs`-pgdg main" | sudo tee  /etc/apt/sources.list.d/pgdg.list
-          sudo apt update
-          sudo apt -y install postgresql-11
-          sudo systemctl enable postgresql
-          sudo systemctl start postgresql
-          sudo su -c "psql -c \"alter user postgres with password 'secret'\"" postgres
-          sudo su -c "createdb arelx_test" postgres
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - name: Delete PR image
+        uses: actions/delete-package-versions@v4
         with:
-          ruby-version: ${{ matrix.versions.ruby }}
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
-      - name: Setup Gemfile
-        run: |
-          cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
-          cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
-          cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
-      - name: bundle install
-        run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
-      - name: Run test Postgres
-        env:
-          PGHOST: localhost
-          PGUSER: postgres
-        run: bundle exec rake test:postgresql
-
-  job_test_mysql:
-    name: test mysql
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        versions: [
-            { ruby: "3.4", rails: 8_1, arelx: 2 },
-            { ruby: "3.4", rails: 8, arelx: 2 },
-            { ruby: "3.4", rails: 7_2, arelx: 2 },
-            { ruby: "3.4", rails: 7_1, arelx: 2 },
-            { ruby: "3.4", rails: 7, arelx: 2 },
-            { ruby: "3.4", rails: 6_1, arelx: 2 },
-            { ruby: "3.3", rails: 8_1, arelx: 2 },
-            { ruby: "3.3", rails: 8, arelx: 2 },
-            { ruby: "3.3", rails: 7_2, arelx: 2 },
-            { ruby: "3.3", rails: 7_1, arelx: 2 },
-            { ruby: "3.3", rails: 7, arelx: 2 },
-            { ruby: "3.3", rails: 6_1, arelx: 2 },
-            { ruby: "3.2", rails: 8_1, arelx: 2 },
-            { ruby: "3.2", rails: 8, arelx: 2 },
-            { ruby: "3.2", rails: 7_2, arelx: 2 },
-            { ruby: "3.2", rails: 7_1, arelx: 2 },
-            { ruby: "3.2", rails: 7, arelx: 2 },
-            { ruby: "3.2", rails: 6_1, arelx: 2 },
-            # { ruby: "3.2", rails: 6, arelx: 2 }, # cannot test > undefined symbol: rb_tainted_str_new2
-            { ruby: "3.1", rails: 7_2, arelx: 2 },
-            { ruby: "3.1", rails: 7_1, arelx: 2 },
-            { ruby: "3.1", rails: 7, arelx: 2 },
-            { ruby: "3.1", rails: 6_1, arelx: 2 },
-            { ruby: "3.1", rails: 6, arelx: 2 },
-            { ruby: "3.0", rails: 7_1, arelx: 2 },
-            { ruby: "3.0", rails: 7, arelx: 2 },
-            { ruby: "3.0", rails: 6_1, arelx: 2 },
-            { ruby: "2.7", rails: 7_1, arelx: 2 },
-            { ruby: "2.7", rails: 7, arelx: 2 },
-            { ruby: "2.7", rails: 6_1, arelx: 2 },
-            { ruby: "2.7", rails: 6, arelx: 2 },
-            { ruby: "2.7", rails: 5_2, arelx: 1 },
-            { ruby: jruby-9.2, rails: 6_1, arelx: 2 },
-            { ruby: jruby-9.2, rails: 6, arelx: 2 },
-            { ruby: jruby-9.2, rails: 5_2, arelx: 1 },
-            { ruby: jruby-9.3, rails: 6_1, arelx: 2 },
-            { ruby: jruby-9.3, rails: 6, arelx: 2 },
-            { ruby: jruby-9.3, rails: 5_2, arelx: 1 },
-          ]
-    # TODO: restore the service. it's far simpler, but since we're testing old
-    # mysql, and we want utf-8 by default, we're currently forced to avoid the
-    # service, and do it as a step. Maybe there's a better solution, who knows?
-    #
-    # services:
-    #   mysql:
-    #     image: mysql:5.7
-    #     env:
-    #       MYSQL_ALLOW_EMPTY_PASSWORD: true
-    #       MYSQL_USERNAME: root
-    #       MYSQL_DATABASE: arelx_test
-    #     ports:
-    #       - 3306:3306
-    #     options: >-
-    #       --health-cmd="mysqladmin ping"
-    #       --health-interval=10s
-    #       --health-timeout=5s
-    #       --health-retries=3
-    #
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Start MySQL with UTF-8
-        run: |
-          docker run -d \
-            --name mysql \
-            -e MYSQL_ALLOW_EMPTY_PASSWORD=true \
-            -e MYSQL_DATABASE=arelx_test \
-            -p 3306:3306 \
-            --health-cmd="mysqladmin ping" \
-            --health-interval=10s \
-            --health-timeout=5s \
-            --health-retries=3 \
-            mysql:5.7 \
-            --character-set-server=utf8mb4
-
-      - name: Wait for MySQL
-        run: |
-          until docker exec mysql mysqladmin ping --silent; do
-            echo 'Waiting for MySQL...'
-            sleep 2
-          done
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.versions.ruby }}
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
-      - name: Setup Gemfile
-        run: |
-          cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
-          cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
-          cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
-      - name: bundle install
-        run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
-      - name: Run test MySql
-        env:
-          DB_CONNECTION: mysql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_DATABASE: arelx_test
-          DB_USERNAME: root
-        run: bundle exec rake test:mysql
-
-  job_test_mssql:
-    name: test mssql on linux
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        versions: [
-            { ruby: "3.4", rails: 8_1, arelx: 2 },
-            { ruby: "3.4", rails: 8, arelx: 2 },
-            { ruby: "3.4", rails: 7_2, arelx: 2 },
-            { ruby: "3.4", rails: 7_1, arelx: 2 },
-            { ruby: "3.4", rails: 7, arelx: 2 },
-            { ruby: "3.4", rails: 6_1, arelx: 2 },
-            { ruby: "3.3", rails: 8_1, arelx: 2 },
-            { ruby: "3.3", rails: 8, arelx: 2 },
-            { ruby: "3.3", rails: 7_2, arelx: 2 },
-            { ruby: "3.3", rails: 7_1, arelx: 2 },
-            { ruby: "3.3", rails: 7, arelx: 2 },
-            { ruby: "3.3", rails: 6_1, arelx: 2 },
-            { ruby: "3.3", rails: 6, arelx: 2 },
-            { ruby: "3.2", rails: 8_1, arelx: 2 },
-            { ruby: "3.2", rails: 8, arelx: 2 },
-            { ruby: "3.2", rails: 7_1, arelx: 2 },
-            { ruby: "3.2", rails: 7, arelx: 2 },
-            { ruby: "3.2", rails: 6_1, arelx: 2 },
-            { ruby: "3.2", rails: 6, arelx: 2 },
-            { ruby: "3.1", rails: 7_1, arelx: 2 },
-            { ruby: "3.1", rails: 7, arelx: 2 },
-            { ruby: "3.1", rails: 6_1, arelx: 2 },
-            { ruby: "3.1", rails: 6, arelx: 2 },
-            { ruby: "3.0", rails: 7, arelx: 2 },
-            { ruby: "3.0", rails: 6_1, arelx: 2 },
-            { ruby: "3.0", rails: 6, arelx: 2 },
-            { ruby: "2.7", rails: 6_1, arelx: 2 },
-            { ruby: "2.7", rails: 6, arelx: 2 },
-            { ruby: "2.7", rails: 5_2, arelx: 1 },
-            # {ruby: jruby-9.2,   rails: 6_1, arelx: 2},
-            # {ruby: jruby-9.2,   rails: 6,   arelx: 2},
-            { ruby: jruby-9.2, rails: 5_2, arelx: 1 },
-            # See comments on 9.4 to understand why these are disabled for now.
-            # {ruby: jruby-9.3,   rails: 6_1, arelx: 2},
-            # {ruby: jruby-9.3,   rails: 6,   arelx: 2},
-            # {ruby: jruby-9.3,   rails: 5_2, arelx: 1},
-            { ruby: jruby-9.4.10, rails: 7_1, arelx: 2 }, # The reason we pin to the patch level is https://github.com/ruby/psych/issues/700
-            { ruby: jruby-9.4.10, rails: 7, arelx: 2 },
-            #
-            # 6 and 6.1 don't work because of a bug in the alt adapter
-            # https://github.com/JesseChavez/activerecord-jdbc-adapter/issues/16
-            # {ruby: jruby-9.4,   rails: 6_1, arelx: 2},
-            # {ruby: jruby-9.4,   rails: 6,   arelx: 2},
-            #
-            # < 5.2 don't work because of a deeper issue.
-            # {ruby: jruby-9.4,   rails: 5_2, arelx: 1},
-          ]
-        mssql: [2017, 2019]
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.versions.ruby }}
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
-      - name: Install MSSQL ${{ matrix.mssql }}
-        uses: potatoqualitee/mssqlsuite@v1.5.1
-        with:
-          version: ${{ matrix.mssql }}
-          install: sqlengine, sqlclient, sqlpackage, localdb
-          sa-password: Password12!
-      - name: Setup Gemfile
-        run: |
-          cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
-          cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
-          cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
-      - name: bundle install
-        run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
-      - name: Run test mssql [mri]
-        if: ${{ !contains(matrix.versions.ruby, 'jruby') }}
-        run: bundle exec rake test:mssql
-      - name: Run test mssql [jruby]
-        if: ${{ contains(matrix.versions.ruby, 'jruby') }}
-        run: |
-          curl -LO https://github.com/microsoft/mssql-jdbc/releases/download/v8.4.1/mssql-jdbc-8.4.1.jre11.jar
-          CLASSPATH=".:mssql-jdbc-8.4.1.jre11.jar" bundle exec rake test:mssql
+          package-name: 'arel-extensions'
+          package-type: 'container'
+          min-versions-to-keep: 0
+          delete-only-untagged-versions: 'false'
+          ignore-versions: 'latest'
+          version-names: pr-${{ github.event.number }}
