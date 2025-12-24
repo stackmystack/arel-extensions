@@ -55,13 +55,9 @@ end
 # Simple formatter for clean logging output
 class SimpleFormatter < Logger::Formatter
   def call(severity, datetime, progname, msg)
-    container =
-      if in_container?
-        "🐋 [#{ENV.fetch('CONTAINER_NAME', Etc.uname[:nodename])}]"
-      else
-        "[#{Etc.uname[:nodename]}]"
-      end
-    "[#{progname}] #{container} #{msg}\n"
+    hostname = "[#{Etc.uname[:nodename]}]"
+    hostname = "🐋 #{hostname}" if in_container?
+    "[#{progname}] #{hostname} #{msg}\n"
   end
 end
 

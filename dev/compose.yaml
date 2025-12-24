@@ -1,6 +1,7 @@
 services:
   arelx:
     container_name: arelx-matrix
+    hostname: arelx-matrix
     build:
       context: ..
       dockerfile: dev/arelx.dockerfile
@@ -23,7 +24,6 @@ services:
       MSSQL_HOST: mssql
       # MSSQL_SA_PASSWORD: Password12!
       MISE_TRUSTED_CONFIG_PATHS: /app
-      CONTAINER_NAME: arelx-matrix
 
   mysql:
     image: mysql:8.0
