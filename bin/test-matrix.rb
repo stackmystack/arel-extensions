@@ -6,6 +6,43 @@ require 'json'
 require 'optparse'
 require 'pp'
 
+# ANSI color code mappings
+COLORS = {
+  red: 31,
+  green: 32,
+  yellow: 33,
+  cyan: 36,
+  white: 37,
+  default: 0
+}.freeze
+
+# String color extensions for terminal output
+class String
+  def red
+    colorize(COLORS[:red])
+  end
+
+  def green
+    colorize(COLORS[:green])
+  end
+
+  def yellow
+    colorize(COLORS[:yellow])
+  end
+
+  def cyan
+    colorize(COLORS[:cyan])
+  end
+
+  def white
+    colorize(COLORS[:white])
+  end
+
+  def colorize(code)
+    "\e[#{code}m#{self}\e[0m"
+  end
+end
+
 def in_container? = File.exist?('/.dockerenv') || File.exist?('/run/.containerenv')
 
 def setup_logger
