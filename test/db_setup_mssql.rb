@@ -20,17 +20,13 @@ begin
   rails_version = ENV.fetch('RAILS_VERSION', '')
 
   # Determine which extra requirement to load based on Ruby/Rails combination
-  extra_req =
     if ruby_version.match?(/\Ajruby-9.2/) && rails_version == '5.2'
-      'activerecord-jdbcsqlserver-adapter'
+      require 'activerecord-jdbcsqlserver-adapter'
     elsif ruby_version.match?(/\Ajruby/)
       nil
     else
-      'activerecord-sqlserver-adapter'
+      require 'activerecord-sqlserver-adapter'
     end
-
-  # Load the extra requirement if needed
-  require extra_req if extra_req
 
   operation = action == 'create' ? :create_database : :drop_database
 

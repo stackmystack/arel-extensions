@@ -88,10 +88,12 @@ class Scheduler
     # Log successful job execution
     #
     # @param job [Hash] job hash
+    # @param output [String] command output
     # @return [void]
-    def success(job)
+    def success(job, output)
       msg = format_job(job)
       log.info("SUCCESS: #{msg}".green)
+      log.debug(output)
     end
 
     # Log failed job execution
@@ -112,7 +114,7 @@ class Scheduler
     # @param output [String] command output
     # @return [void]
     def job(job, ok, output)
-      ok ? success(job) : failure(job, output)
+      ok ? success(job, output) : failure(job, output)
     end
 
     private

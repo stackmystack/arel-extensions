@@ -286,6 +286,7 @@ module Matrix
   JRUBY_MSSQL_ALLOWED =
     {
       'jruby-9.2' => %w[5.2],
+      'jruby-9.3' => %w[],
       'jruby-9.4' => %w[7 7.1],
     }.freeze
 
@@ -333,8 +334,8 @@ module Matrix
   # @return [Boolean] true if job should be skipped
   def self.skip_job?(ruby, rails, task)
     task =~ /mssql/ \
-      && ruby.start_with?('jruby') \
-      && JRUBY_MSSQL_ALLOWED[ruby]&.none? { it == rails }
+      && (allow = JRUBY_MSSQL_ALLOWED[ruby]) \
+      && allow.none? { it == rails }
   end
 
   private_class_method :skip_job?
