@@ -88,7 +88,7 @@ class Scheduler
   # @return [Boolean] true if job succeeded, false otherwise
   def execute(job)
     flags = job.flat_map { |k, v| ["--#{k}", v.to_s] }
-    flags << "--no-container" if !@container
+    flags << '--no-container' if !@container
 
     output, status = Open3.capture2e("./bin/test-tuple", *flags)
 

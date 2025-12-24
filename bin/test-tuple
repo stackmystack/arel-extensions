@@ -65,7 +65,7 @@ class ExecTestTuple
       env['_JAVA_OPTIONS'] = '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED'
     end
 
-    cd(@workspace) do
+    cd(workspace) do
       # Step 1: Prepare workspace (gemspecs, versions, clean bundles)
       sh { 'mise trust' }
       sh { "cp ./gemspecs/arel_extensions-v#{arelx}.gemspec ./arel_extensions.gemspec" }
@@ -168,13 +168,13 @@ class ExecTestTuple
   def sh(env_vars = {}, fail: true, print: false)
     cmd = yield
 
-    # Prepend cd if we're in a directory context
-    current = current_dir
-    full_cmd = if current
-      "cd #{current} && #{cmd}"
-    else
-      cmd
-    end
+    # # Prepend cd if we're in a directory context
+    # current = current_dir
+    # full_cmd = if current
+    #   "cd #{current} && #{cmd}"
+    # else
+    #   cmd
+    # end
 
     # Merge environment variables with inherited env
     merged_env =
@@ -183,8 +183,8 @@ class ExecTestTuple
         .reduce(ENV.to_h) { |acc, e| acc.merge(e) }
         .merge(env_vars)
 
-    log.debug "$ #{full_cmd}"
-    output, status = Open3.capture2e(merged_env, full_cmd)
+    log.debug "[#{current_dir}] $ #{cmd}"
+    output, status = Dir.chdir(current_dir) { Open3.capture2e(merged_env, cmd) }
 
     if status.success?
       log.info output if print
