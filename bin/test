@@ -27,66 +27,29 @@ class Scheduler
       @log = log || setup_logger
     end
 
-    # Log banner/announcement messages in cyan
-    def msg(text)
-      log.info(text.cyan)
-    end
-
-    # Log warnings in yellow
-    def warn(text)
-      log.warn(text.yellow)
-    end
-
-    # Log information in default color (white)
-    def info(text)
-      log.info(text)
-    end
-
     # Log errors in red
-    def error(text)
-      log.error(text.red)
-    end
+    def error(text) = log.error(text)
+    # Log information in default color (white)
+    def info(text) = log.info(text)
+    # Log banner/announcement messages in cyan
+    def msg(text) = log.info(text.cyan)
+    # Log warnings in yellow
+    def warn(text) = log.warn(text)
 
-    # Log successful job execution
-    #
-    # @param job [Hash] job hash
-    # @param output [String] command output
-    # @return [void]
-    def success(job, output)
-      msg = format_job(job)
-      log.info("SUCCESS: #{msg}".green)
-      log.debug(output)
-    end
-
-    # Log failed job execution
-    #
-    # @param job [Hash] job hash
-    # @param output [String] command output
-    # @return [void]
-    def failure(job, output)
-      msg = format_job(job)
-      # Atomic write: combine all failure output into single log call
-      log.error("FAILURE: #{msg}\n#{output}\n#{'-' * 40}".red)
-    end
-
-    # Log job result (delegates to success or failure)
+    # Log job result
     #
     # @param job [Hash] job hash
     # @param ok [Boolean] whether job succeeded
     # @param output [String] command output
     # @return [void]
     def job(job, ok, output)
-      ok ? success(job, output) : failure(job, output)
-    end
-
-    private
-
-    # Format job information with proper alignment
-    #
-    # @param job [Hash] job hash
-    # @return [String] formatted job string
-    def format_job(job)
-      "ruby:#{job[:ruby]} rails:#{job[:rails]} task:#{job[:task]} arelx:#{job[:arelx]}"
+      config = job.map { |key, value| "#{key}:#{value}" }.join(' ')
+      if ok
+        log.info("#{'✓'.green} #{config}")
+        log.debug(output)
+      else
+        log.error("#{'×'.red} #{config.red}\n#{output}\n#{'-' * 40}")
+      end
     end
   end
 
