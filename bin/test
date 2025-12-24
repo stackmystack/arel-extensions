@@ -99,7 +99,7 @@ end
 
 # --- Argument Parsing ---
 log = ExecLogger.new
-options = {}
+options = { container: true }
 
 parser = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [OPTIONS] [FILTER_ARG ...]"
@@ -162,21 +162,22 @@ parser = OptionParser.new do |opts|
   end
 end
 
-parser.parse!
+begin
+  parser.parse!(ARGV)
+rescue OptionParser::ParseError => e
+  log.error "Option parsing failed: #{e.class}"
+  log.error e.message
+  puts parser.help
+  exit 1
+end
 
 options[:filter] = ARGV if ARGV.any?
 
-# --- Docker Detection ---
-
-
-if !in_container? && (!options.key?(:container) || options[:container])
-  log.msg 'Detected Host OS. Running in container…'
-
-  args = ARGV.map { Shellwords.escape(it) }.join(' ')
-  exec "docker compose -f dev/compose.yaml exec arelx /app/bin/test #{args}"
-end
-
 # --- Execution ---
+
+if options[:container] && !in_container?
+  container_exec(log:)
+end
 
 scheduler = Scheduler.new(**options, log:)
 scheduler.run

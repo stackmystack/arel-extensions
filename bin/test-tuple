@@ -176,6 +176,7 @@ class ExecTestTuple
         .reduce(ENV.to_h) { |acc, e| acc.merge(e) }
         .merge(env_vars)
 
+    log.debug "$ #{full_cmd}"
     output, status = Open3.capture2e(merged_env, full_cmd)
 
     if status.success?
@@ -287,7 +288,7 @@ end
 
 # Preserve original arguments before parser modifies ARGV
 ARGVDUP = ARGV.dup.freeze
-log = setup_logger
+log = ExecLogger.new
 options = { container: true }
 
 parser = OptionParser.new do |opts|
@@ -332,14 +333,10 @@ rescue OptionParser::ParseError => e
   exit 1
 end
 
-# --- Docker Detection ---
+# --- Execution ---
 
 if options[:container] && !in_container?
-  log.info 'Detected Host OS. Running in container…'
-
-  args = ARGVDUP.map { Shellwords.escape(it) }.join(' ')
-
-  exec "docker compose -f dev/compose.yaml exec arelx /app/bin/test-tuple #{args}"
+  container_exec(args: ARGVDUP, log:)
 end
 
 # Check if we have flags or CSV positional argument
@@ -370,8 +367,6 @@ if !(ruby && rails && arelx && task)
   puts parser.help
   exit(1)
 end
-
-# --- Execution ---
 
 executor = ExecTestTuple.new(arelx: arelx.to_i, log:, rails:, ruby:, sql:, task:)
 exit(executor.execute)

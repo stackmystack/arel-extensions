@@ -46,10 +46,35 @@ end
 
 def in_container? = File.exist?('/.dockerenv') || File.exist?('/run/.containerenv')
 
+def container_exec(args: ARGV, container: 'arelx', log: setup_logger, prog: "bin/#{File.basename($0)}")
+  log.msg 'Detected Host OS. Running in container…'
+
+  env = ENV.slice('LOG').map { |k, v| "#{k}=#{v}" }
+
+  cmd = %w[compose -f dev/compose.yaml exec]
+  cmd += ['-e', *env] if !env.empty?
+  cmd += [container, prog, *args]
+
+  log.debug "relaying to `docker #{cmd}`"
+
+  exec 'docker', *cmd
+end
+
 def setup_logger
   logger = Logger.new($stdout, progname: File.basename($0))
   logger.formatter = SimpleFormatter.new
-  logger.level = Logger::INFO
+  level =
+    case ENV.fetch('LOG', 'INFO').upcase
+    when 'DEBUG' then Logger::DEBUG
+    when 'ERROR' then Logger::ERROR
+    when 'FATAL' then Logger::FATAL
+    when 'INFO'  then Logger::INFO
+    when 'UNKNOWN' then Logger::UNKNOWN
+    when 'WARN'  then Logger::WARN
+    else Logger::INFO
+    end
+
+  logger.level = level
   logger
 end
 
@@ -69,13 +94,11 @@ class ExecLogger
     @log = log || setup_logger
   end
 
-  # Log errors in red
   def error(text) = log.error(text)
-  # Log information in default color (white)
+  def debug(text) = log.debug(text)
   def info(text) = log.info(text)
-  # Log banner/announcement messages in cyan
   def msg(text) = log.info(text.cyan)
-  # Log warnings in yellow
+  def trace(text) = log.trace(text)
   def warn(text) = log.warn(text)
 
   # Log job result
@@ -421,7 +444,6 @@ if __FILE__ == $PROGRAM_NAME
     ].each do |spec, matches, non_matches|
       it "handles '#{spec}' correctly" do
         pred = VersionRange.predicate(spec)
-        # Using 'it' to refer to iteration elements
         matches.each { assert pred.call(it), "Expected #{spec} to match #{it}" }
         non_matches.each { refute pred.call(it), "Expected #{spec} NOT to match #{it}" }
       end
