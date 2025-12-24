@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require 'etc'
 require 'json'
 require 'optparse'
 require 'pp'
@@ -17,8 +18,12 @@ end
 # Simple formatter for clean logging output
 class SimpleFormatter < Logger::Formatter
   def call(severity, datetime, progname, msg)
-    container = ENV.fetch('CONTAINER_NAME', `cat /etc/hostname`.strip) if in_container?
-    container = "in [#{container}]" if container
+    container =
+      if in_container?
+        "🐋 [#{ENV.fetch('CONTAINER_NAME', Etc.uname[:nodename])}]"
+      else
+        "[#{Etc.uname[:nodename]}]"
+      end
     "[#{progname}] #{container} #{msg}\n"
   end
 end

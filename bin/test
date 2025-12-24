@@ -60,9 +60,8 @@ class Scheduler
   class Logger
     attr_reader :log
 
-    def initialize
-      @log = ::Logger.new($stdout, level: :info)
-      @log.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    def initialize(log: nil)
+      @log = log || setup_logger
     end
 
     # Log banner/announcement messages in cyan
@@ -134,14 +133,14 @@ class Scheduler
   # @param fail_fast [Boolean] stop on first failure
   # @param threads [Integer, nil] number of worker threads (defaults to CPU count - 1)
   # @param container [Boolean, nil] whether to run in container (nil means not explicitly set)
-  def initialize(filter: nil, fail_fast: false, threads: nil, container: nil)
+  def initialize(filter: nil, fail_fast: false, threads: nil, container: nil, log: nil)
     @filter = filter
     @fail_fast = fail_fast
     @threads = threads || [Etc.nprocessors - 1, 1].max
     @container = container
     @stop_mutex = Mutex.new
     @stop_early = false
-    @log = Logger.new
+    @log = log || Logger.new
   end
 
   # Execute all jobs using work-stealing scheduler.
@@ -207,7 +206,7 @@ class Scheduler
 end
 
 # --- Argument Parsing ---
-
+log = Scheduler::Logger.new
 options = {}
 
 parser = OptionParser.new do |opts|
@@ -267,7 +266,7 @@ parser = OptionParser.new do |opts|
 
   opts.on("-h", "--help", "Show this help") do
     puts opts
-    exit
+    exit(0)
   end
 end
 
@@ -277,10 +276,8 @@ options[:filter] = ARGV if ARGV.any?
 
 # --- Docker Detection ---
 
-IN_DOCKER = File.exist?('/.dockerenv') || File.exist?('/run/.containerenv')
 
-if !IN_DOCKER && (!options.key?(:container) || options[:container])
-  log = Scheduler::Logger.new
+if !in_container? && (!options.key?(:container) || options[:container])
   log.msg "Detected Host OS. Executing inside Docker container..."
 
   args = ARGV.join(' ')
@@ -293,6 +290,7 @@ scheduler = Scheduler.new(
   filter: options[:filter],
   fail_fast: options[:fail_fast],
   threads: options[:threads],
-  container: options[:container]
+  container: options[:container],
+  log:,
 )
 scheduler.run
