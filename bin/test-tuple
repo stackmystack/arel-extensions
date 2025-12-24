@@ -168,14 +168,6 @@ class ExecTestTuple
   def sh(env_vars = {}, fail: true, print: false)
     cmd = yield
 
-    # # Prepend cd if we're in a directory context
-    # current = current_dir
-    # full_cmd = if current
-    #   "cd #{current} && #{cmd}"
-    # else
-    #   cmd
-    # end
-
     # Merge environment variables with inherited env
     merged_env =
       @env_stack
@@ -183,17 +175,17 @@ class ExecTestTuple
         .reduce(ENV.to_h) { |acc, e| acc.merge(e) }
         .merge(env_vars)
 
-    log.debug "[#{current_dir}] $ #{cmd}"
+    display = "[#{current_dir}] $ #{cmd}"
+    log.debug display
+
     output, status = Dir.chdir(current_dir) { Open3.capture2e(merged_env, cmd) }
 
     if status.success?
       log.info output if print
     else
-      log.error '[COMMAND FAILED - OUTPUT BELOW]'
-      log.error output
-      log.error '[END OUTPUT]'
+      log.error "[COMMAND FAILED]\n#{display}\n#{output}"
 
-      raise "Command failed (exit #{status.exitstatus}): #{cmd}" if fail
+      raise "Command failed (exit #{status.exitstatus}):\n#{display}" if fail
     end
 
     status
