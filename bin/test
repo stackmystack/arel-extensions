@@ -250,11 +250,5 @@ end
 
 # --- Execution ---
 
-scheduler = Scheduler.new(
-  filter: options[:filter],
-  fail_fast: options[:fail_fast],
-  threads: options[:threads],
-  container: options[:container],
-  log:,
-)
+scheduler = Scheduler.new(**options, log:)
 scheduler.run
