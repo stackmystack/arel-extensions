@@ -27,7 +27,6 @@ class ExecTestTuple
   # @param sql [String, nil] SQL statement to execute instead of rake task
   # @param task [String] Rake task to execute (e.g., "test:postgresql", "test:mysql")
   def initialize(arelx:, log: nil, rails:, ruby:, sql: nil, task:)
-    p [__method__, arelx, rails, ruby, sql, task]
     @arelx = arelx
     @log = log || setup_logger
     @rails = rails
@@ -327,10 +326,9 @@ end
 begin
   parser.parse!(ARGV)
 rescue OptionParser::ParseError => e
-  warn "Option parsing failed: #{e.class}"
-  warn e.message
-  warn
-  warn parser.help
+  log.error "Option parsing failed: #{e.class}"
+  log.error e.message
+  puts parser.help
   exit 1
 end
 
@@ -349,7 +347,7 @@ ruby, rails, arelx, sql, task =
   if ARGV.empty? && options.any? { |k, v| !k.end_with?('container') && v }
     # Using flags - all must be present except --sql is optional
     if !(options[:ruby] && options[:rails] && options[:arelx] && options[:task])
-      log.error "Error: All options (--ruby, --rails, --arelx, --task) must be provided"
+      log.error "All options (--ruby, --rails, --arelx, --task) must be provided"
       log.error parser.help
       return
     end
@@ -360,17 +358,16 @@ ruby, rails, arelx, sql, task =
     parts = ARGV[0].split(',')
 
     if parts.length != 4
-      log.error "Error: CSV must have exactly 4 values: ruby,rails,arelx,task"
+      log.error "CSV must have exactly 4 values: ruby,rails,arelx,task"
       return
     end
 
     [*parts[..-2], options[:sql],  parts[-1]]
   end
 
-p [ruby, rails, arelx, sql, task]
 if !(ruby && rails && arelx && task)
-  log.error "Error: Provide either all options or a single CSV argument"
-  STDERR.puts parser.help
+  log.error "Provide either all options or a single CSV argument"
+  puts parser.help
   exit(1)
 end
 

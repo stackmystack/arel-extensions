@@ -3,6 +3,7 @@
 
 require 'etc'
 require 'json'
+require 'logger'
 require 'optparse'
 require 'pp'
 
@@ -58,6 +59,39 @@ class SimpleFormatter < Logger::Formatter
     hostname = "[#{Etc.uname[:nodename]}]"
     hostname = "🐋 #{hostname}" if in_container?
     "[#{progname}] #{hostname} #{msg}\n"
+  end
+end
+
+class ExecLogger
+  attr_reader :log
+
+  def initialize(log: nil)
+    @log = log || setup_logger
+  end
+
+  # Log errors in red
+  def error(text) = log.error(text)
+  # Log information in default color (white)
+  def info(text) = log.info(text)
+  # Log banner/announcement messages in cyan
+  def msg(text) = log.info(text.cyan)
+  # Log warnings in yellow
+  def warn(text) = log.warn(text)
+
+  # Log job result
+  #
+  # @param job [Hash] job hash
+  # @param ok [Boolean] whether job succeeded
+  # @param output [String] command output
+  # @return [void]
+  def job(job, ok, output)
+    config = job.map { |key, value| "#{key}:#{value}" }.join(' ')
+    if ok
+      log.info("#{'✓'.green} #{config}")
+      log.debug(output)
+    else
+      log.error("#{'×'.red} #{config.red}\n#{output}\n#{'-' * 40}")
+    end
   end
 end
 
@@ -175,17 +209,6 @@ module VersionRange
     }
     l <= o && o <= u
   end
-
-  # Normalize version string for comparison.
-  # Handles jruby-X.X by comparing the numeric part.
-  #
-  # @param version [String] the version string to normalize
-  # @return [Gem::Version] the normalized version for comparison
-  # def self.normalize(version)
-  #   # Strip jruby- prefix if present
-  #   base = version.start_with?('jruby-') ? version.sub('jruby-', '') : version
-  #   Gem::Version.new(base)
-  # end
 end
 
 # Parses filter strings and generates predicate functions for job filtering.

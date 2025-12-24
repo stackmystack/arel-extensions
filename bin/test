@@ -9,7 +9,6 @@ require 'fileutils'
 require 'securerandom'
 require 'shellwords'
 require 'optparse'
-require 'logger'
 require_relative 'test-matrix'
 
 # Schedules and executes test jobs in parallel using a work-stealing strategy.
@@ -18,40 +17,6 @@ require_relative 'test-matrix'
 # fail-fast mode to stop on first failure and configurable thread count.
 class Scheduler
   attr_reader :log
-
-  # Centralized logger with formatting and alignment capabilities
-  class Logger
-    attr_reader :log
-
-    def initialize(log: nil)
-      @log = log || setup_logger
-    end
-
-    # Log errors in red
-    def error(text) = log.error(text)
-    # Log information in default color (white)
-    def info(text) = log.info(text)
-    # Log banner/announcement messages in cyan
-    def msg(text) = log.info(text.cyan)
-    # Log warnings in yellow
-    def warn(text) = log.warn(text)
-
-    # Log job result
-    #
-    # @param job [Hash] job hash
-    # @param ok [Boolean] whether job succeeded
-    # @param output [String] command output
-    # @return [void]
-    def job(job, ok, output)
-      config = job.map { |key, value| "#{key}:#{value}" }.join(' ')
-      if ok
-        log.info("#{'✓'.green} #{config}")
-        log.debug(output)
-      else
-        log.error("#{'×'.red} #{config.red}\n#{output}\n#{'-' * 40}")
-      end
-    end
-  end
 
   # Initialize a new job scheduler with standard logging.
   #
@@ -66,7 +31,7 @@ class Scheduler
     @container = container
     @stop_mutex = Mutex.new
     @stop_early = false
-    @log = log || Logger.new
+    @log = log || ExecLogger.new
   end
 
   # Execute all jobs using work-stealing scheduler.
@@ -133,7 +98,7 @@ class Scheduler
 end
 
 # --- Argument Parsing ---
-log = Scheduler::Logger.new
+log = ExecLogger.new
 options = {}
 
 parser = OptionParser.new do |opts|
