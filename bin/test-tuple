@@ -18,6 +18,15 @@ require_relative 'test-matrix'
 # Creates a temporary workspace, installs dependencies for the specified Ruby/Rails/ArelExtensions
 # version combination, runs the test task/SQL, and cleans up resources.
 class ExecTestTuple
+  attr_accessor :workspace
+
+  attr_reader :arelx
+  attr_reader :log
+  attr_reader :rails
+  attr_reader :ruby
+  attr_reader :sql
+  attr_reader :task
+
   # Initialize a new job executor.
   #
   # @param arelx [Integer] ArelExtensions version (1 or 2)
@@ -38,8 +47,6 @@ class ExecTestTuple
     @workspace = nil
   end
 
-  attr_reader :log
-
   # Execute the test job or SQL statement.
   #
   # Creates an isolated workspace, configures the environment, installs dependencies,
@@ -48,34 +55,34 @@ class ExecTestTuple
   #
   # @return [Boolean] true if execution succeeded, false otherwise
   def execute
-    @workspace = prepare_workspace
+    prepare_workspace
     db_name = "arelx_test_#{SecureRandom.hex(4)}"
-    needs_isolated_db = @task.match?(/mssql|mysql|postgresql/)
+    needs_isolated_db = task.match?(/mssql|mysql|postgresql/)
 
     top = {}.tap do |env|
-      env['BUNDLE_GEMFILE'] = "./gemfiles/rails#{@rails}.gemfile"
-      env['CLASSPATH'] = '.:mssql-jdbc-8.4.1.jre11.jar' if @ruby =~ /jruby/ && @task =~ /mssql/
+      env['BUNDLE_GEMFILE'] = "./gemfiles/rails#{rails}.gemfile"
+      env['CLASSPATH'] = '.:mssql-jdbc-8.4.1.jre11.jar' if ruby =~ /jruby/ && task =~ /mssql/
       env['_JAVA_OPTIONS'] = '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED'
     end
 
     cd(@workspace) do
       # Step 1: Prepare workspace (gemspecs, versions, clean bundles)
       sh { 'mise trust' }
-      sh { "cp ./gemspecs/arel_extensions-v#{@arelx}.gemspec ./arel_extensions.gemspec" }
-      sh { "cp ./version_v#{@arelx}.rb ./lib/arel_extensions/version.rb" }
+      sh { "cp ./gemspecs/arel_extensions-v#{arelx}.gemspec ./arel_extensions.gemspec" }
+      sh { "cp ./version_v#{arelx}.rb ./lib/arel_extensions/version.rb" }
       sh { 'rm -rf Gemfile.lock ./gemfiles/*.lock .bundle' }
 
       # Step 2: Install dependencies
       env(top) do
-        sh { "mise x ruby@#{@ruby} -- bundle install" }
+        sh { "mise x ruby@#{ruby} -- bundle install" }
 
         # Step 3: Setup database
         if needs_isolated_db
-          return execute_sql if @sql
+          return execute_sql if sql
 
           execute_db_script(:create, db_name)
         else
-          return execute_sql if @sql
+          return execute_sql if sql
         end
 
         # Step 4: Run tests
@@ -84,7 +91,7 @@ class ExecTestTuple
         end
 
         env(test) do
-          status = sh(fail: false) { "mise x ruby@#{@ruby} -- bundle exec rake #{@task}" }
+          status = sh(fail: false) { "mise x ruby@#{ruby} -- bundle exec rake #{task}" }
 
           # Step 5: Teardown database
           if needs_isolated_db
@@ -101,7 +108,7 @@ class ExecTestTuple
     STDERR.puts "Job failed: #{e.message}\n#{e.backtrace.join("\n")}"
     return false
   ensure
-    cleanup_workspace if @workspace
+    cleanup_workspace
   end
 
   private
@@ -201,21 +208,19 @@ class ExecTestTuple
   def prepare_workspace
     # Create a unique temp directory inside /tmp
     id = SecureRandom.hex(4)
-    workspace = "/tmp/arelx_run_#{id}"
+    self.workspace = "/tmp/arelx_run_#{id}"
     FileUtils.mkdir_p(workspace)
 
     # TODO: exclude .git too when we get rid of arelx:1
     files = Dir.glob('*') - %w[.ruby-lsp .bundle arel_extensions.gemspec]
     FileUtils.cp_r(files, workspace)
-
-    workspace
   end
 
   # Remove the workspace directory and its contents.
   #
   # @return [void]
   def cleanup_workspace
-    FileUtils.rm_rf(@workspace) if @workspace && Dir.exist?(@workspace)
+    FileUtils.rm_rf(workspace)
   end
 
   # Determine the database setup script path based on the task.
@@ -226,7 +231,7 @@ class ExecTestTuple
   #   Data trumps "smartassiness".
   # @return [String, nil] path to the setup script, or nil for tasks without database setup
   def db_setup_script_for_task
-    case @task
+    case task
     when /postgresql/ then 'test/db_setup_postgresql.rb'
     when /mysql/      then 'test/db_setup_mysql.rb'
     when /mssql/      then 'test/db_setup_mssql.rb'
@@ -249,11 +254,11 @@ class ExecTestTuple
     env_vars = {
       'ARELX_DB_ACTION' => action_str,
       'ARELX_DB_NAME' => db_name,
-      'RUBY_VERSION' => @ruby,
-      'RAILS_VERSION' => @rails,
+      'RUBY_VERSION' => ruby,
+      'RAILS_VERSION' => rails,
     }
 
-    sh(env_vars) { "mise x ruby@#{@ruby} -- bundle exec ruby #{script}" }
+    sh(env_vars) { "mise x ruby@#{ruby} -- bundle exec ruby #{script}" }
   end
 
   # Execute SQL statement.
@@ -262,20 +267,20 @@ class ExecTestTuple
   #
   # @return [Boolean] true if execution succeeded, false otherwise
   def execute_sql
-    if @task == 'test:to_sql'
+    if task == 'test:to_sql'
       log.error 'test:to_sql is not supported for SQL execution'
       return false
     end
 
-    adapter = database_yaml_adapter_key(task: @task, ruby: @ruby)
+    adapter = database_yaml_adapter_key(task:, ruby:)
     log.info "Executing SQL with adapter: #{adapter}"
 
     ruby_code = exec_sql_rb(adapter)
-    env_vars = { 'BUNDLE_GEMFILE' => "./gemfiles/rails#{@rails}.gemfile" }
+    env_vars = { 'BUNDLE_GEMFILE' => "./gemfiles/rails#{rails}.gemfile" }
 
     begin
       sh(env_vars, print: true) do
-        "mise x ruby@#{@ruby} -- bundle exec ruby -e #{Shellwords.escape(ruby_code)}"
+        "mise x ruby@#{ruby} -- bundle exec ruby -e #{Shellwords.escape(ruby_code)}"
       end
       true
     rescue => e
