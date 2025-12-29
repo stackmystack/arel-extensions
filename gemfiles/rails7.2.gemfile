@@ -10,7 +10,7 @@ group :development, :test do
   gem 'activemodel', '~> 7.2'
   gem 'activerecord', '~> 7.2'
 
-  gem 'sqlite3', '~> 1.6', platforms: [:mri]
+  gem 'sqlite3', '1.6', platforms: [:mri]
   gem 'mysql2', '~>0.5', platforms: [:mri]
   gem 'pg', '~> 1.5', platforms: [:mri]
 
