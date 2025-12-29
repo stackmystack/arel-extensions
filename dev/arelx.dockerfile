@@ -30,7 +30,7 @@ RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmo
   && apt-get update -q
 
 RUN ACCEPT_EULA=y DEBIAN_FRONTEND=noninteractive apt-get install -y \
-  freetds-dev libmysqlclient-dev mysql-client msodbcsql18 mssql-tools18 unixodbc-dev libpq-dev \
+  freetds-dev libmysqlclient-dev mysql-client msodbcsql18 mssql-tools18 unixodbc-dev libpq-dev libssl-dev\
   && echo 'export PATH="$PATH:/opt/mssql-tools18/bin"' >> ~/.bashrc \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* \
