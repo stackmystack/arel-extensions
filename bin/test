@@ -25,18 +25,20 @@ class Scheduler
   # @param threads [Integer, nil] number of worker threads (defaults to CPU count - 1)
   # @param container [Boolean, nil] whether to run in container (nil means not explicitly set)
   def initialize(filter: nil, fail_fast: false, threads: nil, container: nil, log: nil)
-    @filter = filter
-    @fail_fast = fail_fast
-    @threads = threads || [Etc.nprocessors - 1, 1].max
     @container = container
-    @stop_mutex = Mutex.new
-    @stop_early = false
+    @fail_fast = fail_fast
+    @failures_mutex = Mutex.new
+    @filter = filter
+    @has_failures = false
     @log = log || ExecLogger.new
+    @stop_early = false
+    @stop_mutex = Mutex.new
+    @threads = threads || [Etc.nprocessors - 1, 1].max
   end
 
   # Execute all jobs using work-stealing scheduler.
   #
-  # @return [void]
+  # @return [Boolean] true if all jobs succeeded, false if any failed
   def run
     jobs = Matrix.jobs(filter: @filter)
 
@@ -50,6 +52,8 @@ class Scheduler
     workers.each(&:join)
 
     log.msg "Matrix Execution Complete"
+
+    !@has_failures
   end
 
   private
@@ -73,9 +77,9 @@ class Scheduler
 
           success = execute(job)
 
-          # Handle fail-fast mode
-          if !success && @fail_fast
-            @stop_mutex.synchronize { @stop_early = true }
+          if !success
+            @failures_mutex.synchronize { @has_failures = true }
+            @stop_mutex.synchronize { @stop_early = true } if @fail_fast
           end
         end
       end
@@ -180,4 +184,4 @@ if options[:container] && !in_container?
 end
 
 scheduler = Scheduler.new(**options, log:)
-scheduler.run
+exit(scheduler.run)
