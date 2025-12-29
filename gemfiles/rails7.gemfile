@@ -17,7 +17,11 @@ group :development, :test do
 
   gem 'sqlite3', '1.6', platforms: [:mri]
   gem 'mysql2', '~>0.5', platforms: [:mri]
-  gem 'pg', '1.5', platforms: [:mri]
+  if ruby3?
+    gem 'pg', '1.5', platforms: [:mri]
+  else
+    gem 'pg', '< 1.0.0', platforms: [:mri]
+  end
 
   gem 'tiny_tds', '3.0', platforms: %i[mri mingw x64_mingw mswin]
   gem 'activerecord-sqlserver-adapter', '~> 7.0.7', platforms: %i[mri mingw x64_mingw mswin]
@@ -29,7 +33,7 @@ group :development, :test do
   # for JRuby
   gem 'jdbc-mssql', platforms: :jruby, require: true
   gem 'jdbc-sqlite3', platform: :jruby
-  gem 'activerecord-jdbc-alt-adapter', '~> 70', platform: :jruby, require: true
+  gem 'activerecord-jdbc-alt-adapter', '70', platform: :jruby, require: true
   gem 'activerecord-jdbcmysql-adapter', platforms: :jruby
   gem 'activerecord-jdbcpostgresql-adapter', platforms: :jruby
   gem 'activerecord-jdbcsqlite3-adapter', platforms: :jruby
