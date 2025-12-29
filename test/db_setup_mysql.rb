@@ -7,6 +7,7 @@
 #   ARELX_DB_ACTION  - 'create' or 'drop'
 #   ARELX_DB_NAME    - Database name to create/drop
 #   RUBY_VERSION     - Ruby version (used to select jdbc-mysql vs mysql2)
+#   RAILS_VERSION    - Rails version (used for dependency selection)
 
 require 'logger'
 require 'active_record'
@@ -16,10 +17,17 @@ begin
   action = ENV.fetch('ARELX_DB_ACTION', 'create')
   db_name = ENV.fetch('ARELX_DB_NAME')
   ruby_version = ENV.fetch('RUBY_VERSION', '')
+  rails_version = ENV.fetch('RAILS_VERSION', '')
 
   operation = action == 'create' ? :create_database : :drop_database
 
-  config = ConfigLoader.load('test/database.yml')['mysql'].dup
+  key =
+    if ruby_version.match?(/\Ajruby-9.2/) && rails_version == '5.2'
+      'jdbc-mysql'
+    else
+      'mysql'
+    end
+  config = ConfigLoader.load('test/database.yml')[key].dup
   # Connect to 'mysql' system database for create/drop operations
   config['database'] = 'mysql'
 
