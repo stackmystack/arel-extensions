@@ -91,9 +91,21 @@ jobs:
           fi
 
   test:
-    name: Test suite
+    name: Test (${{ matrix.name }})
     runs-on: ubuntu-latest
     needs: build_image
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: JRuby
+            command: "/app/bin/test jruby:: 'test:!sqlite' 'test:!to_sql'"
+          - name: MRI Ruby (2.7 -> 3.1)
+            command: "/app/bin/test ruby:2.7:3.1 'test:!sqlite' 'test:!to_sql'"
+          - name: MRI Ruby (3.2 -> 3.4)
+            command: "/app/bin/test ruby:3.2:3.4 'test:!sqlite' 'test:!to_sql'"
+          - name: SQLite & To-SQL
+            command: "/app/bin/test test:sqlite && /app/bin/test test:to_sql"
     permissions:
       packages: read
     steps:
@@ -120,7 +132,7 @@ jobs:
       - name: Run Tests
         run: |
           docker compose -f dev/compose.base.yaml -f .github/compose.yaml exec -T arelx \
-            /app/bin/test
+            bash -c "${{ matrix.command }}"
 
   cleanup:
     name: Clean up PR image
