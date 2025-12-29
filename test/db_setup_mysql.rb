@@ -17,12 +17,9 @@ begin
   db_name = ENV.fetch('ARELX_DB_NAME')
   ruby_version = ENV.fetch('RUBY_VERSION', '')
 
-  # Determine which adapter config to use based on Ruby version
-  adapter_key = ruby_version.include?('jruby') ? 'jdbc-mysql' : 'mysql'
-
   operation = action == 'create' ? :create_database : :drop_database
 
-  config = ConfigLoader.load('test/database.yml')[adapter_key].dup
+  config = ConfigLoader.load('test/database.yml')['mysql'].dup
   # Connect to 'mysql' system database for create/drop operations
   config['database'] = 'mysql'
 
