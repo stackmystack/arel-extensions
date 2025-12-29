@@ -115,15 +115,12 @@ jobs:
       - name: Start Environment
         run: |
           # --wait pauses script until healthchecks pass.
-          docker compose -f .github/compose.yaml up -d --wait
+          docker compose -f dev/compose.base.yaml -f .github/compose.yaml up -d --wait
 
       - name: Run Tests
         run: |
-          docker compose -f .github/compose.yaml exec -T arelx \
-             bash -c "ls && pwd"
-
-          docker compose -f .github/compose.yaml exec -T arelx \
-            /app/bin/test ruby:3.4 rails:8
+          docker compose -f dev/compose.base.yaml -f .github/compose.yaml exec -T arelx \
+            /app/bin/test
 
   cleanup:
     name: Clean up PR image

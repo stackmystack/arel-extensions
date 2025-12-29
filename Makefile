@@ -1,5 +1,6 @@
+COMPOSE_BASE := dev/compose.base.yaml
 COMPOSE_FILE := dev/compose.yaml
-DC := docker compose -f $(COMPOSE_FILE)
+DC := docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_FILE)
 
 .PHONY: down rebuild shell stop up
 
