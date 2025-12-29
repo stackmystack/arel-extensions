@@ -33,7 +33,7 @@ group :development, :test do
   # for JRuby
   gem 'jdbc-mssql', platforms: :jruby, require: true
   gem 'jdbc-sqlite3', platform: :jruby
-  gem 'activerecord-jdbc-alt-adapter', '70', platform: :jruby, require: true
+  gem 'activerecord-jdbc-alt-adapter', '70.2', platform: :jruby, require: true
   gem 'activerecord-jdbcmysql-adapter', platforms: :jruby
   gem 'activerecord-jdbcpostgresql-adapter', platforms: :jruby
   gem 'activerecord-jdbcsqlite3-adapter', platforms: :jruby
