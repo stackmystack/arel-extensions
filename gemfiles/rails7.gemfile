@@ -20,7 +20,7 @@ group :development, :test do
   if ruby3?
     gem 'pg', '1.5', platforms: [:mri]
   else
-    gem 'pg', '< 1.0.0', platforms: [:mri]
+    gem 'pg', '1.2', platforms: [:mri]
   end
 
   gem 'tiny_tds', '3.0', platforms: %i[mri mingw x64_mingw mswin]
