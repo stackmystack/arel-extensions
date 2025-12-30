@@ -18,7 +18,7 @@ RUN mkdir -p $APP_HOME
 RUN apt-get update -q && apt-get install -y \
   curl eza fd-find bundler build-essential git gnupg locales \
   libbz2-dev libffi-dev liblzma-dev lsb-release libsqlite3-dev libyaml-dev \
-  make neovim ncurses-term pkg-config openjdk-17-jdk-headless tzdata zlib1g-dev \
+  make neovim ncurses-term pkg-config openjdk-11-jdk-headless tzdata zlib1g-dev \
   && ln -fs /usr/share/zoneinfo/UTC /etc/localtime \
   && dpkg-reconfigure --frontend noninteractive tzdata
 
