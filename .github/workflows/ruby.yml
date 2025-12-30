@@ -46,14 +46,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: JRuby
-            command: "bin/test jruby:: 'test:!sqlite' 'test:!to_sql'"
-          - name: MRI Ruby (2.7 -> 3.1)
-            command: "bin/test ruby:2.7:3.1 'test:!sqlite' 'test:!to_sql'"
-          - name: MRI Ruby (3.2 -> 3.4)
-            command: "bin/test ruby:3.2:3.4 'test:!sqlite' 'test:!to_sql'"
-          - name: SQLite & To-SQL
-            command: "bin/test test:sqlite && bin/test test:to_sql"
+          - name: Rails < 6
+            command: bin/test rails:5.2 && bin/test rails:6 # 14 + 28 = 42
+          - name: Rails 6.1
+            command: bin/test rails:6.1 # 38
+          - name: Rails 7
+            command: bin/test rails:7 # 35
+          - name: Rails 7.1
+            command: bin/test rails:7.1 # 35
+          - name: Rails 7.2
+            command: bin/test rails:7.2 # 20
+          - name: Rails 8+
+            command: bin/test rails:8 && bin/test rails:8.1 # 15 + 15 = 30
     permissions:
       packages: read
     steps:
