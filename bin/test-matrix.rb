@@ -110,10 +110,10 @@ class ExecLogger
   def job(job, ok, output)
     config = job.map { |key, value| "#{key}:#{value}" }.join(' ')
     if ok
-      log.info("#{'✓'.green} #{config}")
+      log.info("#{'✔'.green} #{config}")
       log.debug(output)
     else
-      log.error("#{'×'.red} #{config.red}\n#{output}\n#{'-' * 40}")
+      log.error("#{'✘'.red} #{config.red}\n#{output}\n#{'-' * 40}")
     end
   end
 end
