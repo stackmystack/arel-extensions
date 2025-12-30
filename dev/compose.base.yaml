@@ -9,26 +9,32 @@ services:
       MYSQL_HOST: mysql
       POSTGRES_HOST: postgres
       MSSQL_HOST: mssql
+      BUNDLE_MIRROR__ALL: "http://gemstash:9292"
+      BUNDLE_MIRROR__ALL__FALLBACK_TIMEOUT: "2"
+      BUNDLE_SSL_VERIFY_MODE: "0"
     command: tail -f /dev/null
     depends_on:
-      mysql:
+      gemstash:
         condition: service_healthy
       postgres:
         condition: service_healthy
       mssql:
         condition: service_healthy
+      mysql:
+        condition: service_healthy
 
-  mysql:
-    image: mysql:8.0
-    container_name: arelx-mysql
-    environment:
-      MYSQL_DATABASE: arelx_test
-      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+  gemstash:
+    image: arelx-gemstash:latest
+    container_name: arelx-gemstash
+    ports:
+      - "9292:9292"
+    volumes:
+      - gemstash_data:/root/.gemstash
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost"]
+      test: ["CMD", "curl", "-f", "http://localhost:9292/"]
       interval: 5s
-      timeout: 5s
       retries: 5
+      timeout: 5s
 
   postgres:
     image: postgres:16
@@ -45,8 +51,8 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
-      timeout: 5s
       retries: 5
+      timeout: 5s
 
   mssql:
     image: mcr.microsoft.com/mssql/server:2019-latest
@@ -64,5 +70,19 @@ services:
         ]
       interval: 5s
       retries: 5
-      start_period: 10s
       timeout: 5s
+
+  mysql:
+    image: mysql:8.0
+    container_name: arelx-mysql
+    environment:
+      MYSQL_DATABASE: arelx_test
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost"]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+
+volumes:
+  gemstash_data:
