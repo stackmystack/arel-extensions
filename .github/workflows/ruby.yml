@@ -46,10 +46,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Rails < 6
-            command: bin/test rails:5.2 && bin/test rails:6 # 14 + 28 = 42
+          - name: Rails 5.2
+            command: bin/test rails:5.2 # 14
+          - name: Rails 6
+            command: bin/test rails:6 # 28
           - name: Rails 6.1
-            command: bin/test rails:6.1 # 38
+            command: bin/test rails:6.1 # 15
+          - name: Rails 6.1
+            command: bin/test rails:6.1 # 23
           - name: Rails 7 on Ruby 3.2+
             command: bin/test rails:7 ruby:3.2:3.4 # 15
           - name: Rails 7 on Ruby 2.7 -> 3.1 & JRuby
@@ -60,8 +64,10 @@ jobs:
             command: bin/test rails:7.1 'ruby:!3.2:3.4' # 20
           - name: Rails 7.2
             command: bin/test rails:7.2 # 20
-          - name: Rails 8+
-            command: bin/test rails:8 && bin/test rails:8.1 # 15 + 15 = 30
+          - name: Rails 8
+            command: bin/test rails:8 # 15
+          - name: Rails 8.1
+            command: bin/test rails:8.1 # 15
     permissions:
       packages: read
     steps:
