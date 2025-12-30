@@ -74,6 +74,7 @@ class ExecTestTuple
 
       # Step 2: Install dependencies
       env(top) do
+        sh { "mise x ruby@#{ruby} -- bundle config set --local path vendor" }
         sh { "mise x ruby@#{ruby} -- bundle install" }
 
         # Step 3: Setup database
