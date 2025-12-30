@@ -67,7 +67,6 @@ class ExecTestTuple
 
     cd(workspace) do
       # Step 1: Prepare workspace (gemspecs, versions, clean bundles)
-      sh { 'mise trust' }
       sh { "cp ./gemspecs/arel_extensions-v#{arelx}.gemspec ./arel_extensions.gemspec" }
       sh { "cp ./version_v#{arelx}.rb ./lib/arel_extensions/version.rb" }
       sh { 'rm -rf Gemfile.lock ./gemfiles/*.lock .bundle' }

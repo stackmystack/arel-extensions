@@ -9,6 +9,7 @@ ENV MISE_DATA_DIR="/mise"
 ENV MISE_CONFIG_DIR="/mise"
 ENV MISE_CACHE_DIR="/mise/cache"
 ENV MISE_INSTALL_PATH="/usr/local/bin/mise"
+ENV MISE_TRUSTED_CONFIG_PATHS="/"
 ENV PATH="/mise/shims:$PATH"
 
 RUN mkdir -p $APP_HOME
@@ -63,7 +64,6 @@ alias fd='fd -H'
 alias g='git'
 alias ls='eza --all --color=auto --git --group-directories-first --header --hyperlink --icons=auto --long --mounts --no-permissions --no-user --octal-permissions --sort=name --time-style=relative -F'
 alias ssh='ssh -o "SetEnv TERM=xterm-256color"'
-alias y='yazi'
 
 eval "\$(atuin init bash --disable-up-arrow)"
 BASH

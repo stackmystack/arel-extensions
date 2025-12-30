@@ -2,11 +2,22 @@ services:
   arelx:
     container_name: arelx-dev
     hostname: arelx-dev
+
+# =[ To test the CI image:
+#     image: ghcr.io/stackmystack/arel-extensions/arel-extensions:pr-25
+#     platform: linux/amd64
+#     volumes:
+#       - gem_cache_amd64:/mise/installs/ruby
+# volumes:
+#   gem_cache_amd64:
+# ]=
+
+# =[ To test image changes:
     build:
       context: ..
       dockerfile: dev/arelx.dockerfile
     volumes:
       - gem_cache:/mise/installs/ruby
-
 volumes:
   gem_cache:
+# ]= And Don't forget to turn on/off the correct volumes.

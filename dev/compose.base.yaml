@@ -9,7 +9,6 @@ services:
       MYSQL_HOST: mysql
       POSTGRES_HOST: postgres
       MSSQL_HOST: mssql
-      MISE_TRUSTED_CONFIG_PATHS: /app
     command: tail -f /dev/null
     depends_on:
       mysql:
