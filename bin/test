@@ -33,7 +33,7 @@ class Scheduler
     @log = log || ExecLogger.new
     @stop_early = false
     @stop_mutex = Mutex.new
-    @threads = threads || [Etc.nprocessors - 1, 1].max
+    @threads = threads || [Etc.nprocessors, 1].max
   end
 
   # Execute all jobs using work-stealing scheduler.
