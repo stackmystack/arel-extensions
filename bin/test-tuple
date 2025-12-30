@@ -286,6 +286,7 @@ end
 
 # Preserve original arguments before parser modifies ARGV
 ARGVDUP = ARGV.dup.freeze
+
 log = ExecLogger.new
 options = { container: true }
 

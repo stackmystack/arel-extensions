@@ -102,6 +102,9 @@ class Scheduler
 end
 
 # --- Argument Parsing ---
+# Preserve original arguments before parser modifies ARGV
+ARGVDUP = ARGV.dup.freeze
+
 log = ExecLogger.new
 options = { container: true }
 
@@ -180,7 +183,7 @@ options[:filter] = ARGV if ARGV.any?
 # --- Execution ---
 
 if options[:container] && !in_container?
-  container_exec(log:)
+  container_exec(args: ARGVDUP, log:)
 end
 
 scheduler = Scheduler.new(**options, log:)
