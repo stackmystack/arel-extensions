@@ -54,3 +54,5 @@ mssql:
   database: <%= ENV.fetch('ARELX_DATABASE', 'master') %>
   username: sa
   password: Password12!
+  trustServerCertificate: true
+  encrypt: false
