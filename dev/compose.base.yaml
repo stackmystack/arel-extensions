@@ -1,0 +1,88 @@
+services:
+  arelx:
+    container_name: arelx-matrix-base
+    hostname: arelx-matrix
+    working_dir: /app
+    volumes:
+      - ..:/app
+    environment:
+      MYSQL_HOST: mysql
+      POSTGRES_HOST: postgres
+      MSSQL_HOST: mssql
+      BUNDLE_MIRROR__ALL: "http://gemstash:9292"
+      BUNDLE_MIRROR__ALL__FALLBACK_TIMEOUT: "2"
+      BUNDLE_SSL_VERIFY_MODE: "0"
+    command: tail -f /dev/null
+    depends_on:
+      gemstash:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      mssql:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
+  gemstash:
+    image: arelx-gemstash:latest
+    container_name: arelx-gemstash
+    ports:
+      - "9292:9292"
+    volumes:
+      - gemstash_data:/root/.gemstash
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9292/"]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+
+  postgres:
+    image: postgres:16
+    container_name: arelx-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: arelx_test
+    command: >
+      bash -c "
+      locale-gen fr_FR.utf8 && update-locale &&
+      localedef -i fr_FR -c -f UTF-8 -A /usr/share/locale/locale.alias fr_FR.UTF-8 &&
+      docker-entrypoint.sh postgres"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    container_name: arelx-mssql
+    # Safe to keep platform here (it is native for CI x86, required emulation for M1 Macs)
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: Y
+      MSSQL_SA_PASSWORD: Password12!
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P $${MSSQL_SA_PASSWORD} -Q 'SELECT 1' -b -o /dev/null",
+        ]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+
+  mysql:
+    image: mysql:8.0
+    container_name: arelx-mysql
+    environment:
+      MYSQL_DATABASE: arelx_test
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost"]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+
+volumes:
+  gemstash_data:

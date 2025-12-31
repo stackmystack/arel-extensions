@@ -8,7 +8,7 @@ require 'support/fake_record'
 
 require_relative './config_loader'
 
-ENV['AREL_EXTENSIONS_IN_TEST'] = '1' # Useful for deprecation warnings.
+ENV['AREL_EXTENSIONS_IN_TEST'] = '0' # Useful for deprecation warnings.
 
 def colored(color, msg)
   /^xterm|-256color$/.match?(ENV['TERM']) ? "\x1b[#{color}m#{msg}\x1b[89m\x1b[0m" : "#{msg}"

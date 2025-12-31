@@ -1,69 +1,16 @@
-name: arelx
 services:
   arelx:
-    container_name: arelx-build
+    container_name: arelx-dev
+    hostname: arelx-dev
+# =[ To test image changes:
     build:
       context: ..
       dockerfile: dev/arelx.dockerfile
-    volumes:
-      - ../:/app
-      - gem_cache:/mise/installs/ruby
-    command: tail -f /dev/null
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      # TODO: Fix, it's not healthy apparently
-      # mssql:
-      #   condition: service_healthy
-    environment:
-      # Map ENV vars for database.yml
-      MYSQL_HOST: mariadb
-      POSTGRES_HOST: postgres
-      MSSQL_HOST: mssql
-
-  mariadb:
-    image: mariadb:11.0
-    container_name: mariadb
-    environment:
-      MARIADB_DATABASE: arelx_test
-      MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: true
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  postgres:
-    build:
-      context: ..
-      dockerfile: dev/postgres.dockerfile
-    container_name: postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: arelx_test
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  mssql:
-    image: mcr.microsoft.com/mssql/server:2019-latest
-    container_name: mssql
-    platform: linux/amd64
-    environment:
-      ACCEPT_EULA: Y
-      # MSSQL_COLLATION: Latin1_General_100_CI_AS_SC_UTF8
-      MSSQL_SA_PASSWORD: Password12!
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P $${MSSQL_SA_PASSWORD} -Q 'SELECT 1'"]
-      interval: 10s
-      retries: 20
-      start_period: 30s
-      timeout: 10s
-
-volumes:
-  gem_cache:
+# ]=
+#
+# =[ To test the CI image:
+#     image: ghcr.io/stackmystack/arel-extensions/arel-extensions:pr-25
+#     platform: linux/amd64
+# volumes:
+#   gemstash_data_amd64:
+# ]= You may have to set the platform of the gemstash image too.

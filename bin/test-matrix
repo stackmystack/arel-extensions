@@ -1,0 +1,93 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'json'
+require 'optparse'
+require 'pp'
+require_relative 'test-matrix'
+
+# CLI tool for test-matrix library
+#
+# @example Pretty Ruby output
+#   ./bin/test-matrix
+#
+# @example JSON output
+#   ./bin/test-matrix --json
+#
+# @example Compact format
+#   ./bin/test-matrix --compact
+#
+# @example Filter by Ruby version
+#   ./bin/test-matrix 3.2
+
+format = :ruby
+compact = false
+filter = nil
+
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: #{$0} [OPTIONS] [FILTER_ARG ...]"
+  opts.separator ""
+  opts.separator "FILTER EXAMPLES (pass each filter as separate argument):"
+  opts.separator "  #{$0}                              # All jobs"
+  opts.separator "  #{$0} ruby:3.2                     # Exact: Ruby 3.2"
+  opts.separator "  #{$0} ruby:3:                      # Prefix: All Ruby 3.x (3.0, 3.1, 3.2, ...)"
+  opts.separator "  #{$0} ruby:3.0:3.3                 # Range: Ruby 3.0 to 3.3 (inclusive)"
+  opts.separator "  #{$0} ruby:!3.2                    # Negated exact: All except Ruby 3.2"
+  opts.separator "  #{$0} ruby:!3:                     # Negated prefix: All except 3.x"
+  opts.separator "  #{$0} ruby:!3.0:3.3                # Negated range: All except 3.0-3.3"
+  opts.separator "  #{$0} ruby:3: rails:8             # Combined: Ruby 3.x + Rails 8"
+  opts.separator "  #{$0} task:postgresql              # Task shorthand (→ task:test:postgresql)"
+  opts.separator "  #{$0} test:sqlite                  # Test shorthand (→ task:test:sqlite)"
+  opts.separator "  #{$0} jruby:9.4                    # JRuby shorthand (→ ruby:jruby-9.4)"
+  opts.separator ""
+  opts.separator "FILTER DIMENSIONS:"
+  opts.separator "  ruby:<spec>      - By Ruby version (exact, prefix:, range:to, or negated with !)"
+  opts.separator "  jruby:<version>  - Shorthand for ruby:jruby-<version>"
+  opts.separator "  rails:<spec>     - By Rails version (same syntax as ruby)"
+  opts.separator "  arelx:<spec>     - By ArelExtensions version (same syntax as ruby)"
+  opts.separator "  task:<task>      - By test task (e.g., task:postgresql, task:test:sqlite)"
+  opts.separator "  test:<task>      - Shorthand for task:test:<task>"
+  opts.separator ""
+  opts.separator "VERSION SYNTAX (for ruby, rails, arelx):"
+  opts.separator "  3.2              - Exact match: 3.2"
+  opts.separator "  3:               - Prefix match: all versions starting with 3"
+  opts.separator "  3:3.3            - Range match: 3 to 3.3 (inclusive on both ends)"
+  opts.separator "  !3.2             - Negated exact: everything except 3.2"
+  opts.separator "  !3:              - Negated prefix: everything except 3.x"
+  opts.separator "  !3:3.3           - Negated range: everything except 3 to 3.3"
+  opts.separator ""
+  opts.separator "NOTES:"
+  opts.separator "  Each argument can contain multiple space-separated filters"
+  opts.separator "  All filters must match for a job to be included (AND logic)"
+  opts.separator "  Task/test shorthands are normalized: test:postgresql → task:test:postgresql"
+  opts.separator "  JRuby shorthand is normalized: jruby:9.4 → ruby:jruby-9.4"
+  opts.separator ""
+
+  opts.on("--json", "Output as JSON") do
+    format = :json
+  end
+
+  opts.on("--compact", "Compact output") do
+    compact = true
+  end
+
+  opts.on("-h", "--help", "Show this help") do
+    puts opts
+    exit
+  end
+end
+
+parser.parse!
+
+filter = ARGV if ARGV.any?
+
+jobs = Matrix.jobs(filter: filter)
+
+output = case format
+when :json
+  compact ? JSON.generate(jobs) : JSON.pretty_generate(jobs)
+when :ruby
+  compact ? jobs.inspect : jobs.pretty_inspect
+end
+
+puts output

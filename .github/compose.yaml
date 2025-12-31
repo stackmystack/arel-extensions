@@ -1,0 +1,5 @@
+services:
+  arelx:
+    image: arelx-matrix:latest
+    container_name: arelx-ci
+    hostname: arelx-ci

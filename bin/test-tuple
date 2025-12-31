@@ -1,0 +1,371 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'etc'
+require 'fileutils'
+require 'json'
+require 'logger'
+require 'open3'
+require 'optparse'
+require 'securerandom'
+require 'shellwords'
+require 'thread'
+
+require_relative 'test-matrix'
+
+# Executes a single test job in an isolated workspace with database setup/teardown, or executes SQL.
+#
+# Creates a temporary workspace, installs dependencies for the specified Ruby/Rails/ArelExtensions
+# version combination, runs the test task/SQL, and cleans up resources.
+class ExecTestTuple
+  attr_accessor :workspace
+
+  attr_reader :arelx
+  attr_reader :log
+  attr_reader :rails
+  attr_reader :ruby
+  attr_reader :sql
+  attr_reader :task
+
+  # Initialize a new job executor.
+  #
+  # @param arelx [Integer] ArelExtensions version (1 or 2)
+  # @param log [Logger] logger instance
+  # @param rails [String] Rails version (e.g., "7.1", "8")
+  # @param ruby [String] Ruby version (e.g., "3.2", "jruby-9.4")
+  # @param sql [String, nil] SQL statement to execute instead of rake task
+  # @param task [String] Rake task to execute (e.g., "test:postgresql", "test:mysql")
+  def initialize(arelx:, log: nil, rails:, ruby:, sql: nil, task:)
+    @arelx = arelx
+    @log = log || setup_logger
+    @rails = rails
+    @ruby = ruby
+    @sql = sql
+    @task = task
+    @env_stack = []
+    @dir_stack = []
+    @workspace = nil
+  end
+
+  # Execute the test job or SQL statement.
+  #
+  # Creates an isolated workspace, configures the environment, installs dependencies,
+  # sets up the database (if needed), runs the test task or SQL, tears down the database,
+  # and cleans up the workspace.
+  #
+  # @return [Boolean] true if execution succeeded, false otherwise
+  def execute
+    prepare_workspace
+    db_name = "arelx_test_#{SecureRandom.hex(4)}"
+    needs_isolated_db = task.match?(/mssql|mysql|postgresql/)
+
+    top = {}.tap do |env|
+      env['BUNDLE_GEMFILE'] = "./gemfiles/rails#{rails}.gemfile"
+      env['CLASSPATH'] = '.:mssql-jdbc-8.4.1.jre11.jar' if ruby =~ /jruby/ && task =~ /mssql/
+      env['_JAVA_OPTIONS'] = '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED'
+    end
+
+    cd(workspace) do
+      # Step 1: Prepare workspace (gemspecs, versions, clean bundles)
+      sh { "cp ./gemspecs/arel_extensions-v#{arelx}.gemspec ./arel_extensions.gemspec" }
+      sh { "cp ./version_v#{arelx}.rb ./lib/arel_extensions/version.rb" }
+      sh { 'rm -rf Gemfile.lock ./gemfiles/*.lock .bundle' }
+
+      # Step 2: Install dependencies
+      env(top) do
+        sh { "mise x ruby@#{ruby} -- bundle config set --local path vendor" }
+        sh { "mise x ruby@#{ruby} -- bundle install" }
+
+        # Step 3: Setup database
+        if needs_isolated_db
+          return execute_sql if sql
+
+          execute_db_script(:create, db_name)
+        else
+          return execute_sql if sql
+        end
+
+        # Step 4: Run tests
+        test = {}.tap do |env|
+          env['ARELX_DATABASE'] = db_name if needs_isolated_db
+        end
+
+        env(test) do
+          status = sh(fail: false) { "mise x ruby@#{ruby} -- bundle exec rake #{task}" }
+
+          # Step 5: Teardown database
+          if needs_isolated_db
+            execute_db_script(:drop, db_name)
+          end
+
+          # Return based on test result
+          return status.success?
+        end
+      end
+    end
+
+  rescue => e
+    STDERR.puts "Job failed: #{e.message}\n#{e.backtrace.join("\n")}"
+    return false
+  ensure
+    cleanup_workspace
+  end
+
+  private
+
+  # Execute a block within a directory context.
+  #
+  # Maintains a stack of directory contexts for nested calls. The directory is prepended
+  # to shell commands executed within the block.
+  #
+  # @param dir [String] directory path
+  # @yield block to execute in the directory context
+  # @return [Object] result of the block
+  def cd(dir)
+    @dir_stack.push(dir)
+    begin
+      yield
+    ensure
+      @dir_stack.pop
+    end
+  end
+
+  # Get the current directory context.
+  #
+  # @return [String, nil] current directory from the stack, or nil if none
+  def current_dir
+    @dir_stack.last
+  end
+
+  # Execute a block with additional environment variables.
+  #
+  # Maintains a stack of environment contexts for nested calls. Variables are merged
+  # with parent contexts and system environment when executing shell commands.
+  #
+  # @param vars [Hash<String, String>] environment variables to add
+  # @yield block to execute with the environment context
+  # @return [Object] result of the block
+  def env(vars = {})
+    @env_stack.push(vars)
+    begin
+      yield
+    ensure
+      @env_stack.pop
+    end
+  end
+
+  # Execute a shell command with merged environment and directory context.
+  #
+  # Combines environment variables from the env stack with provided vars, and prepends
+  # the current directory (if any) to the command.
+  #
+  # @param env_vars [Hash<String, String>] additional environment variables
+  # @param fail [Boolean] whether to raise on command failure
+  # @param print [Boolean] whether to print successful command output
+  # @yield command string to execute
+  # @return [Array<(String, Process::Status)>] command output and process status
+  # @raise [RuntimeError] if command fails and `fail` is true
+  def sh(env_vars = {}, fail: true, print: false)
+    cmd = yield
+
+    # Merge environment variables with inherited env
+    merged_env =
+      @env_stack
+        .reverse
+        .reduce(ENV.to_h) { |acc, e| acc.merge(e) }
+        .merge(env_vars)
+
+    display = "[#{current_dir}] $ #{cmd}"
+    log.debug display
+
+    output, status = Dir.chdir(current_dir) { Open3.capture2e(merged_env, cmd) }
+
+    if status.success?
+      log.info output if print
+    else
+      log.error "[COMMAND FAILED]\n#{display}\n#{output}"
+
+      raise "Command failed (exit #{status.exitstatus}):\n#{display}" if fail
+    end
+
+    status
+  end
+
+  # Create an isolated workspace for the job.
+  #
+  # Copies project files to a unique temporary directory under /tmp, excluding
+  # build artifacts and IDE configurations.
+  #
+  # @return [String] path to the workspace directory
+  def prepare_workspace
+    # Create a unique temp directory inside /tmp
+    id = SecureRandom.hex(4)
+    self.workspace = "/tmp/arelx_run_#{id}"
+    FileUtils.mkdir_p(workspace)
+
+    # TODO: exclude .git too when we get rid of arelx:1
+    files = Dir.glob('*') - %w[.ruby-lsp .bundle arel_extensions.gemspec]
+    FileUtils.cp_r(files, workspace)
+  end
+
+  # Remove the workspace directory and its contents.
+  #
+  # @return [void]
+  def cleanup_workspace
+    FileUtils.rm_rf(workspace)
+  end
+
+  # Determine the database setup script path based on the task.
+  #
+  # @note even if it's tempting to use the exec_sql_rb-style SQL generation and
+  #   execution here, we need to run full Ruby scripts to setup/teardown databases
+  #   to better control the debugging and avoid fiddling with program generators.
+  #   Data trumps "smartassiness".
+  # @return [String, nil] path to the setup script, or nil for tasks without database setup
+  def db_setup_script_for_task
+    case task
+    when /postgresql/ then 'test/db_setup_postgresql.rb'
+    when /mysql/      then 'test/db_setup_mysql.rb'
+    when /mssql/      then 'test/db_setup_mssql.rb'
+    end
+  end
+
+  # Execute database setup or teardown script.
+  #
+  # Runs the appropriate database script with environment variables for the database name,
+  # action, Ruby version, and Rails version.
+  #
+  # @param action [Symbol] :create to setup database, :drop to teardown
+  # @param db_name [String] unique database name for this job
+  # @return [void]
+  def execute_db_script(action, db_name)
+    script = db_setup_script_for_task
+    return if script.nil?
+
+    action_str = action == :create ? 'create' : 'drop'
+    env_vars = {
+      'ARELX_DB_ACTION' => action_str,
+      'ARELX_DB_NAME' => db_name,
+      'RUBY_VERSION' => ruby,
+      'RAILS_VERSION' => rails,
+    }
+
+    sh(env_vars) { "mise x ruby@#{ruby} -- bundle exec ruby #{script}" }
+  end
+
+  # Execute SQL statement.
+  #
+  # Generates and executes inline Ruby code that connects to the database and runs SQL.
+  #
+  # @return [Boolean] true if execution succeeded, false otherwise
+  def execute_sql
+    if task == 'test:to_sql'
+      log.error 'test:to_sql is not supported for SQL execution'
+      return false
+    end
+
+    adapter = database_yaml_adapter_key(task:, ruby:)
+    log.info "Executing SQL with adapter: #{adapter}"
+
+    ruby_code = exec_sql_rb(adapter)
+    env_vars = { 'BUNDLE_GEMFILE' => "./gemfiles/rails#{rails}.gemfile" }
+
+    begin
+      sh(env_vars, print: true) do
+        "mise x ruby@#{ruby} -- bundle exec ruby -e #{Shellwords.escape(ruby_code)}"
+      end
+      true
+    rescue => e
+      log.error "SQL execution failed: #{e.message}"
+      false
+    end
+  end
+end
+
+# --- Argument Parsing ---
+
+# Preserve original arguments before parser modifies ARGV
+ARGVDUP = ARGV.dup.freeze
+
+log = ExecLogger.new
+options = { container: true }
+
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: #{$0} [OPTIONS] or #{$0} <ruby,rails,arelx,task>"
+
+  opts.on('--ruby RUBY', 'Ruby version') do |v|
+    options[:ruby] = v
+  end
+
+  opts.on('--rails RAILS', 'Rails version') do |v|
+    options[:rails] = v
+  end
+
+  opts.on('--arelx ARELX', 'Arel Extensions version') do |v|
+    options[:arelx] = v
+  end
+
+  opts.on('--task TASK', 'Task to run') do |v|
+    options[:task] = v
+  end
+
+  opts.on('--sql SQL', 'SQL statement to execute') do |v|
+    options[:sql] = v
+  end
+
+  opts.on('--[no-]container', 'Run inside Docker container (default: true)') do |v|
+    options[:container] = v
+  end
+
+  opts.on('-h', '--help', 'Prints this help') do
+    puts opts
+    exit(0)
+  end
+end
+
+begin
+  parser.parse!(ARGV)
+rescue OptionParser::ParseError => e
+  log.error "Option parsing failed: #{e.class}"
+  log.error e.message
+  puts parser.help
+  exit 1
+end
+
+# --- Execution ---
+
+if options[:container] && !in_container?
+  container_exec(args: ARGVDUP, log:)
+end
+
+# Check if we have flags or CSV positional argument
+ruby, rails, arelx, sql, task =
+  if ARGV.empty? && options.any? { |k, v| !k.end_with?('container') && v }
+    # Using flags - all must be present except --sql is optional
+    if !(options[:ruby] && options[:rails] && options[:arelx] && options[:task])
+      log.error 'All options (--ruby, --rails, --arelx, --task) must be provided'
+      log.error parser.help
+      return
+    end
+
+    options.values_at(:ruby, :rails, :arelx, :sql, :task)
+  elsif ARGV.length == 1
+    # Using CSV positional argument
+    parts = ARGV[0].split(',')
+
+    if parts.length != 4
+      log.error 'CSV must have exactly 4 values: ruby,rails,arelx,task'
+      return
+    end
+
+    [*parts[..-2], options[:sql],  parts[-1]]
+  end
+
+if !(ruby && rails && arelx && task)
+  log.error 'Provide either all options or a single CSV argument'
+  puts parser.help
+  exit(1)
+end
+
+executor = ExecTestTuple.new(arelx: arelx.to_i, log:, rails:, ruby:, sql:, task:)
+exit(executor.execute)
