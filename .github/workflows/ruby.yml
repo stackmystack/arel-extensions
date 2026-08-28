@@ -64,7 +64,7 @@ jobs:
             { ruby: jruby-9.3, rails: 5_2, arelx: 1 },
           ]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Setup Gemfile
         run: |
           cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
@@ -87,8 +87,8 @@ jobs:
           mkdir -p /tmp/bundle-diagnostics
           cp Gemfile /tmp/bundle-diagnostics/ || true
           cp Gemfile.lock /tmp/bundle-diagnostics/ || true
-          bundle env > /tmp/bundle-diagnostics/bundle-env.txt || true
-          gem list > /tmp/bundle-diagnostics/gem-list.txt || true
+          bundle env > /tmp/bundle-diagnostics/bundle-env.txt 2>&1 || true
+          gem list > /tmp/bundle-diagnostics/gem-list.txt 2>&1 || true
       - name: Upload bundler diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -147,7 +147,7 @@ jobs:
             { ruby: jruby-9.3, rails: 5_2, arelx: 1 },
           ]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Setup Gemfile
         run: |
           cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
@@ -170,8 +170,8 @@ jobs:
           mkdir -p /tmp/bundle-diagnostics
           cp Gemfile /tmp/bundle-diagnostics/ || true
           cp Gemfile.lock /tmp/bundle-diagnostics/ || true
-          bundle env > /tmp/bundle-diagnostics/bundle-env.txt || true
-          gem list > /tmp/bundle-diagnostics/gem-list.txt || true
+          bundle env > /tmp/bundle-diagnostics/bundle-env.txt 2>&1 || true
+          gem list > /tmp/bundle-diagnostics/gem-list.txt 2>&1 || true
       - name: Upload bundler diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -229,7 +229,7 @@ jobs:
             { ruby: jruby-9.3, rails: 5_2, arelx: 1 },
           ]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
         # PostgreSQL requires locales to be installed on the system to be able
         # to do time and currency conversions at runtime.
         #
@@ -274,8 +274,8 @@ jobs:
           mkdir -p /tmp/bundle-diagnostics
           cp Gemfile /tmp/bundle-diagnostics/ || true
           cp Gemfile.lock /tmp/bundle-diagnostics/ || true
-          bundle env > /tmp/bundle-diagnostics/bundle-env.txt || true
-          gem list > /tmp/bundle-diagnostics/gem-list.txt || true
+          bundle env > /tmp/bundle-diagnostics/bundle-env.txt 2>&1 || true
+          gem list > /tmp/bundle-diagnostics/gem-list.txt 2>&1 || true
       - name: Upload bundler diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -355,7 +355,7 @@ jobs:
     #       --health-retries=3
     #
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
 
       - name: Start MySQL with UTF-8
         run: |
@@ -400,8 +400,8 @@ jobs:
           mkdir -p /tmp/bundle-diagnostics
           cp Gemfile /tmp/bundle-diagnostics/ || true
           cp Gemfile.lock /tmp/bundle-diagnostics/ || true
-          bundle env > /tmp/bundle-diagnostics/bundle-env.txt || true
-          gem list > /tmp/bundle-diagnostics/gem-list.txt || true
+          bundle env > /tmp/bundle-diagnostics/bundle-env.txt 2>&1 || true
+          gem list > /tmp/bundle-diagnostics/gem-list.txt 2>&1 || true
       - name: Upload bundler diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -474,7 +474,7 @@ jobs:
           ]
         mssql: [2017, 2019]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
       - name: Setup Gemfile
         run: |
           cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
@@ -503,8 +503,8 @@ jobs:
           mkdir -p /tmp/bundle-diagnostics
           cp Gemfile /tmp/bundle-diagnostics/ || true
           cp Gemfile.lock /tmp/bundle-diagnostics/ || true
-          bundle env > /tmp/bundle-diagnostics/bundle-env.txt || true
-          gem list > /tmp/bundle-diagnostics/gem-list.txt || true
+          bundle env > /tmp/bundle-diagnostics/bundle-env.txt 2>&1 || true
+          gem list > /tmp/bundle-diagnostics/gem-list.txt 2>&1 || true
       - name: Upload bundler diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
