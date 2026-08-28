@@ -65,23 +65,37 @@ jobs:
           ]
     steps:
       - uses: actions/checkout@v2
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.versions.ruby }}
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
       - name: Setup Gemfile
         run: |
           cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
           cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
           cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
-      - name: bundle install
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.versions.ruby }}
+          bundler-cache: true
+      - name: Install FreeTDS
         run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
+          sudo apt-get update -q
+          sudo apt-get install -y freetds-dev
+      - name: bundle install
+        run: bundle install --retry 3
+      - name: Capture bundler diagnostics
+        if: failure()
+        run: |
+          mkdir -p /tmp/bundle-diagnostics
+          cp Gemfile /tmp/bundle-diagnostics/ || true
+          cp Gemfile.lock /tmp/bundle-diagnostics/ || true
+          bundle env > /tmp/bundle-diagnostics/bundle-env.txt || true
+          gem list > /tmp/bundle-diagnostics/gem-list.txt || true
+      - name: Upload bundler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-debug-to_sql-${{ matrix.versions.ruby }}-${{ matrix.versions.rails }}-${{ matrix.versions.arelx }}
+          path: /tmp/bundle-diagnostics
+          retention-days: 5
       - name: Run test to_sql
         run: bundle exec rake test:to_sql
 
@@ -134,23 +148,37 @@ jobs:
           ]
     steps:
       - uses: actions/checkout@v2
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.versions.ruby }}
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
       - name: Setup Gemfile
         run: |
           cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
           cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
           cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
-      - name: bundle install
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.versions.ruby }}
+          bundler-cache: true
+      - name: Install FreeTDS
         run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
+          sudo apt-get update -q
+          sudo apt-get install -y freetds-dev
+      - name: bundle install
+        run: bundle install --retry 3
+      - name: Capture bundler diagnostics
+        if: failure()
+        run: |
+          mkdir -p /tmp/bundle-diagnostics
+          cp Gemfile /tmp/bundle-diagnostics/ || true
+          cp Gemfile.lock /tmp/bundle-diagnostics/ || true
+          bundle env > /tmp/bundle-diagnostics/bundle-env.txt || true
+          gem list > /tmp/bundle-diagnostics/gem-list.txt || true
+      - name: Upload bundler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-debug-sqlite-${{ matrix.versions.ruby }}-${{ matrix.versions.rails }}-${{ matrix.versions.arelx }}
+          path: /tmp/bundle-diagnostics
+          retention-days: 5
       - name: Run test sqlite
         run: bundle exec rake test:sqlite
 
@@ -224,23 +252,37 @@ jobs:
           sudo systemctl start postgresql
           sudo su -c "psql -c \"alter user postgres with password 'secret'\"" postgres
           sudo su -c "createdb arelx_test" postgres
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.versions.ruby }}
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
       - name: Setup Gemfile
         run: |
           cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
           cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
           cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
-      - name: bundle install
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.versions.ruby }}
+          bundler-cache: true
+      - name: Install FreeTDS
         run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
+          sudo apt-get update -q
+          sudo apt-get install -y freetds-dev
+      - name: bundle install
+        run: bundle install --retry 3
+      - name: Capture bundler diagnostics
+        if: failure()
+        run: |
+          mkdir -p /tmp/bundle-diagnostics
+          cp Gemfile /tmp/bundle-diagnostics/ || true
+          cp Gemfile.lock /tmp/bundle-diagnostics/ || true
+          bundle env > /tmp/bundle-diagnostics/bundle-env.txt || true
+          gem list > /tmp/bundle-diagnostics/gem-list.txt || true
+      - name: Upload bundler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-debug-postgres-${{ matrix.versions.ruby }}-${{ matrix.versions.rails }}-${{ matrix.versions.arelx }}
+          path: /tmp/bundle-diagnostics
+          retention-days: 5
       - name: Run test Postgres
         env:
           PGHOST: localhost
@@ -336,23 +378,37 @@ jobs:
             sleep 2
           done
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.versions.ruby }}
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
       - name: Setup Gemfile
         run: |
           cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
           cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
           cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
-      - name: bundle install
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.versions.ruby }}
+          bundler-cache: true
+      - name: Install FreeTDS
         run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
+          sudo apt-get update -q
+          sudo apt-get install -y freetds-dev
+      - name: bundle install
+        run: bundle install --retry 3
+      - name: Capture bundler diagnostics
+        if: failure()
+        run: |
+          mkdir -p /tmp/bundle-diagnostics
+          cp Gemfile /tmp/bundle-diagnostics/ || true
+          cp Gemfile.lock /tmp/bundle-diagnostics/ || true
+          bundle env > /tmp/bundle-diagnostics/bundle-env.txt || true
+          gem list > /tmp/bundle-diagnostics/gem-list.txt || true
+      - name: Upload bundler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-debug-mysql-${{ matrix.versions.ruby }}-${{ matrix.versions.rails }}-${{ matrix.versions.arelx }}
+          path: /tmp/bundle-diagnostics
+          retention-days: 5
       - name: Run test MySql
         env:
           DB_CONNECTION: mysql
@@ -419,10 +475,16 @@ jobs:
         mssql: [2017, 2019]
     steps:
       - uses: actions/checkout@v2
+      - name: Setup Gemfile
+        run: |
+          cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
+          cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
+          cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.versions.ruby }}
+          bundler-cache: true
       - name: Install FreeTDS
         run: |
           sudo apt-get update -q
@@ -433,15 +495,23 @@ jobs:
           version: ${{ matrix.mssql }}
           install: sqlengine, sqlclient, sqlpackage, localdb
           sa-password: Password12!
-      - name: Setup Gemfile
-        run: |
-          cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
-          cp ./version_v${{ matrix.versions.arelx }}.rb lib/arel_extensions/version.rb
-          cp ./gemfiles/rails${{ matrix.versions.rails }}.gemfile ./Gemfile
       - name: bundle install
+        run: bundle install --retry 3
+      - name: Capture bundler diagnostics
+        if: failure()
         run: |
-          bundle config set gemfile ./gemfiles/rails${{ matrix.versions.rails }}.gemfile
-          bundle install
+          mkdir -p /tmp/bundle-diagnostics
+          cp Gemfile /tmp/bundle-diagnostics/ || true
+          cp Gemfile.lock /tmp/bundle-diagnostics/ || true
+          bundle env > /tmp/bundle-diagnostics/bundle-env.txt || true
+          gem list > /tmp/bundle-diagnostics/gem-list.txt || true
+      - name: Upload bundler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-debug-mssql-${{ matrix.versions.ruby }}-${{ matrix.versions.rails }}-${{ matrix.versions.arelx }}-${{ matrix.mssql }}
+          path: /tmp/bundle-diagnostics
+          retention-days: 5
       - name: Run test mssql [mri]
         if: ${{ !contains(matrix.versions.ruby, 'jruby') }}
         run: bundle exec rake test:mssql
