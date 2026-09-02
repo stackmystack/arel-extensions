@@ -20,9 +20,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  resolve_image:
+    name: Resolve CI image
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compute image tag and verify it exists
+        id: resolve
+        run: |
+          hash=$(sha256sum .github/images/Dockerfile | cut -d' ' -f1)
+          tag="ghcr.io/${{ github.repository_owner }}/arel-ci:${hash}"
+          echo "Resolved tag: ${tag}"
+          if ! docker manifest inspect "${tag}" > /dev/null 2>&1; then
+            echo "CI image ${tag} was not found on ghcr.io."
+            echo "This usually means .github/images/Dockerfile changed and hasn't been built on master yet."
+            echo "Push the change to master (or run the 'Build CI image' workflow manually) first, then re-run this workflow."
+            exit 1
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
   job_test_to_sql:
     name: test to_sql
+    needs: resolve_image
     runs-on: ubuntu-22.04
+    container:
+      image: ${{ needs.resolve_image.outputs.tag }}
     strategy:
       fail-fast: false
       matrix:
@@ -79,10 +103,6 @@ jobs:
         with:
           ruby-version: ${{ matrix.versions.ruby }}
           bundler-cache: true
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
       - name: bundle install
         run: bundle install --retry 3
       - name: Capture bundler diagnostics
@@ -105,7 +125,10 @@ jobs:
 
   job_test_sqlite:
     name: test sqlite
+    needs: resolve_image
     runs-on: ubuntu-22.04
+    container:
+      image: ${{ needs.resolve_image.outputs.tag }}
     strategy:
       fail-fast: false
       matrix:
@@ -162,10 +185,6 @@ jobs:
         with:
           ruby-version: ${{ matrix.versions.ruby }}
           bundler-cache: true
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
       - name: bundle install
         run: bundle install --retry 3
       - name: Capture bundler diagnostics
@@ -188,7 +207,10 @@ jobs:
 
   job_test_postgres:
     name: test postgres
+    needs: resolve_image
     runs-on: ubuntu-22.04
+    container:
+      image: ${{ needs.resolve_image.outputs.tag }}
     strategy:
       fail-fast: false
       matrix:
@@ -234,28 +256,12 @@ jobs:
           ]
     steps:
       - uses: actions/checkout@v7
-        # PostgreSQL requires locales to be installed on the system to be able
-        # to do time and currency conversions at runtime.
-        #
-        # That's why we're not launching it as a service; pre-built images
-        # lack loaclization.
-        #
-        # After we install locales, we'll install PostgreSQL binaries and start
-        # the service.
-      - name: setup locale
+      - name: Start Postgres
+        # Postgres itself, its user, and the arelx_test database are all
+        # already baked into the CI image.
         run: |
-          sudo locale-gen fr_FR.utf8
-          sudo update-locale
-      - name: setup postgres 11
-        run: |
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc|sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
-          echo "deb http://apt.postgresql.org/pub/repos/apt/ `lsb_release -cs`-pgdg main" | sudo tee  /etc/apt/sources.list.d/pgdg.list
-          sudo apt update
-          sudo apt -y install postgresql-11
-          sudo systemctl enable postgresql
-          sudo systemctl start postgresql
-          sudo su -c "psql -c \"alter user postgres with password 'secret'\"" postgres
-          sudo su -c "createdb arelx_test" postgres
+          service postgresql start
+          until pg_isready -U postgres > /dev/null 2>&1; do sleep 1; done
       - name: Setup Gemfile
         run: |
           cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
@@ -266,10 +272,6 @@ jobs:
         with:
           ruby-version: ${{ matrix.versions.ruby }}
           bundler-cache: true
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
       - name: bundle install
         run: bundle install --retry 3
       - name: Capture bundler diagnostics
@@ -295,7 +297,10 @@ jobs:
 
   job_test_mysql:
     name: test mysql
+    needs: resolve_image
     runs-on: ubuntu-22.04
+    container:
+      image: ${{ needs.resolve_image.outputs.tag }}
     strategy:
       fail-fast: false
       matrix:
@@ -339,49 +344,16 @@ jobs:
             { ruby: jruby-9.3, rails: 6, arelx: 2 },
             { ruby: jruby-9.3, rails: 5_2, arelx: 1 },
           ]
-    # TODO: restore the service. it's far simpler, but since we're testing old
-    # mysql, and we want utf-8 by default, we're currently forced to avoid the
-    # service, and do it as a step. Maybe there's a better solution, who knows?
-    #
-    # services:
-    #   mysql:
-    #     image: mysql:5.7
-    #     env:
-    #       MYSQL_ALLOW_EMPTY_PASSWORD: true
-    #       MYSQL_USERNAME: root
-    #       MYSQL_DATABASE: arelx_test
-    #     ports:
-    #       - 3306:3306
-    #     options: >-
-    #       --health-cmd="mysqladmin ping"
-    #       --health-interval=10s
-    #       --health-timeout=5s
-    #       --health-retries=3
-    #
     steps:
       - uses: actions/checkout@v7
-
-      - name: Start MySQL with UTF-8
+      - name: Start MySQL
+        # MySQL itself, the utf8mb4 defaults, and the arelx_test database are
+        # all already baked into the CI image (see
+        # .github/images/Dockerfile); all that's left at job time is
+        # starting the service.
         run: |
-          docker run -d \
-            --name mysql \
-            -e MYSQL_ALLOW_EMPTY_PASSWORD=true \
-            -e MYSQL_DATABASE=arelx_test \
-            -p 3306:3306 \
-            --health-cmd="mysqladmin ping" \
-            --health-interval=10s \
-            --health-timeout=5s \
-            --health-retries=3 \
-            mysql:5.7 \
-            --character-set-server=utf8mb4
-
-      - name: Wait for MySQL
-        run: |
-          until docker exec mysql mysqladmin ping --silent; do
-            echo 'Waiting for MySQL...'
-            sleep 2
-          done
-
+          service mysql start
+          until mysqladmin ping --silent > /dev/null 2>&1; do sleep 1; done
       - name: Setup Gemfile
         run: |
           cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec
@@ -392,10 +364,6 @@ jobs:
         with:
           ruby-version: ${{ matrix.versions.ruby }}
           bundler-cache: true
-      - name: Install FreeTDS
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y freetds-dev
       - name: bundle install
         run: bundle install --retry 3
       - name: Capture bundler diagnostics
