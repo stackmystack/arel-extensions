@@ -12,6 +12,9 @@
   for that name. `Arel::Table.new` also makes the name of a common table expression. A
   reflection on such a name can only fail. The schema cache keeps the list of data sources,
   thus `column_of` examines that list first.
+- MS SQL: `SELECT` over a derived table (e.g. a `UNION` alias) with a `limit`/`offset`
+  no longer crashes while generating the SQL. Such a query still needs an explicit
+  `order`, since SQL Server requires `ORDER BY` with `OFFSET`/`FETCH`.
 
 ## Release v2.5.0/v1.7.0 (02-09-2026)
 

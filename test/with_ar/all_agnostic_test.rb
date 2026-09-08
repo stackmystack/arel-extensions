@@ -1084,6 +1084,19 @@ module ArelExtensions
         assert (@ut.project(@age) + @ut.project(@age)).as('toto').table_name # as on union should answer to table_name (TableAlias)
       end
 
+      def test_union_with_limit
+        # Regression on SQL Server: SELECTing from a derived table (a UNION alias)
+        # with a limit/offset used to crash while the adapter tried to add a
+        # deterministic ORDER BY from the (non existent) derived table's primary key.
+        #
+        # SQL Server still requires an explicit ORDER BY to use OFFSET/FETCH, so
+        # the query carries its own order.
+        u = @ut.project(@age).where(@age.gt(22)) + @ut.project(@age).where(@age.lt(0))
+        rel = User.select('*').from(u.as('my_union')).order(Arel.sql('age'))
+        assert_equal 2, rel.limit(2).length
+        assert_equal 2, rel.offset(1).limit(2).length
+      end
+
       # Case clause
       def test_case
         assert_equal 4, User.find_by_sql(@ut.project(@score.when(20.16).then(1).else(0).as('score_bin')).to_sql).sum(&:score_bin)
