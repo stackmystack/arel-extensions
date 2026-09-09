@@ -15,6 +15,9 @@
 - MS SQL: `SELECT` over a derived table (e.g. a `UNION` alias) with a `limit`/`offset`
   no longer crashes while generating the SQL. Such a query still needs an explicit
   `order`, since SQL Server requires `ORDER BY` with `OFFSET`/`FETCH`.
+- MS SQL: support for `regexp_replace` is added, but note that this requires an
+  extension or a paid subscription so don't expect it to work out-of-the-box for
+  freely distributed versions of the MS SQL Server.
 
 ## Release v2.5.0/v1.7.0 (02-09-2026)
 

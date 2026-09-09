@@ -304,6 +304,17 @@ module ArelExtensions
         end
       end
 
+      def visit_ArelExtensions_Nodes_RegexpReplace o, collector # rubocop:disable Naming/MethodName
+          collector << "dbo.REGEXP_REPLACE("
+          visit o.left, collector
+          collector << LOADED_VISITOR::COMMA
+          visit Arel::Nodes.build_quoted(o.pattern&.source), collector
+          collector << LOADED_VISITOR::COMMA
+          visit o.substitute, collector
+          collector << ")"
+          collector
+      end
+
       def visit_ArelExtensions_Nodes_Round(o, collector)
         collector << 'ROUND('
         o.expressions.each_with_index { |arg, i|
