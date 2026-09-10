@@ -2,6 +2,23 @@
 
 module ArelExtensions
   class CommonSqlFunctions
+    # SQLite has a native SOUNDEX, but the sqlite3 gem is compiled without it and
+    # I couldn't get it to work with system sqlite3, so I provided SOUNDEX in Ruby space.
+    SOUNDEX_GROUPS = {
+      1 => %w[B F P V],
+      2 => %w[C G J K Q S X Z],
+      3 => %w[D T],
+      4 => %w[L],
+      5 => %w[M N],
+      6 => %w[R],
+    }.freeze
+
+    SOUNDEX_CODES =
+      SOUNDEX_GROUPS
+        .flat_map { |code, letters| letters.map { |l| [l, code.to_s] } }
+        .to_h
+        .freeze
+
     def initialize(cnx)
       @cnx = cnx
       if cnx && cnx.adapter_name =~ /sqlite/i && !$load_extension_disabled
@@ -36,6 +53,29 @@ module ArelExtensions
         i = value1.to_s.index(value2.to_s)
         func.result = i ? (i + 1) : 0
       end rescue 'function instr already here (>= 3.8.5)'
+      db.create_function('soundex', 1) do |func, val|
+        func.result = val.nil? ? nil : soundex(val.to_s)
+      end
+    end
+
+    # It's not really important to be absolutely correct. We just want to make sure it's called.
+    def soundex(str)
+      letters = str.upcase.gsub(/[^A-Z]/, '').chars
+      return '' if letters.empty?
+
+      first = letters.shift
+      digits = +''
+      last_code = SOUNDEX_CODES[first]
+      letters.each do |ch|
+        code = SOUNDEX_CODES[ch]
+        if code
+          digits << code if code != last_code
+          last_code = code
+        elsif ch != 'H' && ch != 'W'
+          last_code = nil
+        end
+      end
+      (first + digits).ljust(4, '0')[0, 4]
     end
 
     def add_sql_functions(env_db = nil)

@@ -197,15 +197,25 @@ module ArelExtensions
       end
 
       def visit_Arel_Nodes_Regexp(o, collector)
+        collector << '('
         collector = visit o.left, collector
+        collector << ' IS NOT NULL AND '
+        collector = visit o.left.coalesce(''), collector
         collector << ' REGEXP '
-        visit o.right, collector
+        collector = visit o.right, collector
+        collector << ')'
+        collector
       end
 
       def visit_Arel_Nodes_NotRegexp(o, collector)
+        collector << '('
         collector = visit o.left, collector
+        collector << ' IS NOT NULL AND '
+        collector = visit o.left.coalesce(''), collector
         collector << ' NOT REGEXP '
-        visit o.right, collector
+        collector = visit o.right, collector
+        collector << ')'
+        collector
       end
 
       def visit_ArelExtensions_Nodes_Wday(o, collector)
