@@ -36,6 +36,10 @@ group :development, :test do
   gem 'jdbc-mssql', platforms: :jruby, require: true
   gem 'jdbc-sqlite3', platforms: :jruby
 
+  # The json gem broke rails upon the release of v3.0, specifically for postgres.
+  # Pinning is for our test suite.
+  gem 'json', '<= 2.21.2'
+
   # Ruby 3.4+ removes the following gems from the standard distribution.
   # Warnings are emitted from 3.3 .
   if Gem::Version.create(RUBY_VERSION) >= Gem::Version.create('3.3.0')
