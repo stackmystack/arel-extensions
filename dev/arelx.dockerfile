@@ -9,9 +9,13 @@ RUN mkdir -p $APP_HOME
 RUN apt-get update -q && apt-get install -y \
   curl bundler build-essential git gnupg locales \
   libbz2-dev libffi-dev liblzma-dev lsb-release libsqlite3-dev libyaml-dev \
-  make neovim ncurses-term openjdk-17-jdk-headless tzdata zlib1g-dev \
+  make neovim ncurses-term openjdk-17-jdk-headless sqlite3-pcre tzdata zlib1g-dev \
   && ln -fs /usr/share/zoneinfo/UTC /etc/localtime \
   && dpkg-reconfigure --frontend noninteractive tzdata
+
+RUN curl -fsSL -o /tmp/extension-functions.c 'https://sqlite.org/contrib/download/extension-functions.c?get=25' \
+  && gcc -fPIC -lm -shared /tmp/extension-functions.c -o /usr/lib/sqlite3/extension-functions.so \
+  && rm /tmp/extension-functions.c
 
 # Add DB Repo Keys
 RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg \
