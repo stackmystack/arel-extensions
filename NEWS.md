@@ -31,6 +31,8 @@
   `\H` (Ruby's non-hex-digit shorthand, which none of these engines have a native concept
   of) now raises inside a character class on every database.
   `String` patterns and `regexp_replace` are unaffected.
+- SQLite: `=~` / `!~` no longer crash with `no string` when the compared column is `NULL`;
+  such rows are now excluded, matching the other databases.
 
 ## Release v2.5.0/v1.7.0 (02-09-2026)
 
