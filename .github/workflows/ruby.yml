@@ -142,6 +142,12 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y freetds-dev
+      - name: Install SQLite regexp/math extensions
+        run: |
+          sudo apt-get install -y sqlite3-pcre
+          curl -fsSL -o /tmp/extension-functions.c 'https://sqlite.org/contrib/download/extension-functions.c?get=25'
+          gcc -fPIC -lm -shared /tmp/extension-functions.c -o /tmp/extension-functions.so
+          sudo cp /tmp/extension-functions.so /usr/lib/sqlite3/extension-functions.so
       - name: Setup Gemfile
         run: |
           cp ./gemspecs/arel_extensions-v${{ matrix.versions.arelx }}.gemspec ./arel_extensions.gemspec

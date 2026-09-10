@@ -2,6 +2,7 @@
 *.jar
 *.lock
 *.swp
+*.vendor
 .bundle
 config/database.yml
 coverage/*
