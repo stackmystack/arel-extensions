@@ -35,6 +35,10 @@ group :development, :test do
   gem 'activerecord-jdbcsqlite3-adapter', platforms: :jruby
   gem 'jdbc-mssql', platforms: :jruby, require: true
   gem 'jdbc-sqlite3', platforms: :jruby
+
+  # The json gem broke rails upon the release of v3.0, specifically for postgres.
+  # Pinning is for our test suite.
+  gem 'json', '<= 2.21.2'
 end
 
 gemspec path: Dir.pwd
